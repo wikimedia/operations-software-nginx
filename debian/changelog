@@ -1,3 +1,10 @@
+nginx (1.9.2-1+wmf2) jessie-wikimedia; urgency=medium
+
+  * Filipe da Silva's multicert patches ported onto 1.9.2-1+wmf1
+  * libssl-dev dep set to >= 1.0.2 (for the above)
+
+ -- Brandon Black <bblack@wikimedia.org>  Fri, 26 Jun 2015 23:08:05 +0000
+
 nginx (1.9.2-1+wmf1) unstable; urgency=medium
 
   * Local bugfix for ssl_stapling_file
