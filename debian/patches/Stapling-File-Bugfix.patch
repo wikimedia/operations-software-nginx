@@ -1,0 +1,13 @@
+diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
+index 03ff540..f487534 100644
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -466,7 +466,7 @@ ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn, void *data)
+     rc = SSL_TLSEXT_ERR_NOACK;
+ 
+     if (staple->staple.len
+-        && staple->valid >= ngx_time())
++        && (staple->host.len == 0 || staple->valid >= ngx_time()))
+     {
+         /* we have to copy ocsp response as OpenSSL will free it by itself */
+ 

@@ -1,1 +1,3 @@
 perl-use-dpkg-buildflags.patch
+# WMF-local patches:
+Stapling-File-Bugfix.patch
