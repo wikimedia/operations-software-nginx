@@ -1,0 +1,80 @@
+From 35a3bd2fedf2a821d0e50a7934f32a0bce0bd2a7 Mon Sep 17 00:00:00 2001
+From: Brandon L Black <blblack@gmail.com>
+Date: Thu, 18 Jun 2015 14:06:05 +0000
+Subject: [PATCH 2/7] SSL: refactor and split ngx_ssl_certificate in two.
+ Preparation for Multiple SSL certificate support.
+
+These patches are based on the ones from Filipe da Silva here:
+http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html
+00-SplitMethod.diff
+ # HG changeset patch
+ # Parent  953ef81705e1e2d735e956e5fc6406a862e29419
+---
+ src/event/ngx_event_openssl.c | 34 ++++++++++++++++++++++++++++++++--
+ 1 file changed, 32 insertions(+), 2 deletions(-)
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 1b789e6..3fee271 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -18,6 +18,10 @@ typedef struct {
+ } ngx_openssl_conf_t;
+ 
+ 
++static ngx_int_t ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_str_t *cert);
++static ngx_int_t ngx_ssl_private_key(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_str_t *key, ngx_array_t *passwords);
+ static int ngx_ssl_password_callback(char *buf, int size, int rwflag,
+     void *userdata);
+ static int ngx_ssl_verify_callback(int ok, X509_STORE_CTX *x509_store);
+@@ -301,11 +305,26 @@ ngx_int_t
+ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+     ngx_str_t *key, ngx_array_t *passwords)
+ {
++    /* load server certificate */
++    if (ngx_ssl_server_certificate(cf, ssl, cert) != NGX_OK)
++    {
++        return NGX_ERROR;
++    }
++    /* load private key */
++    if (ngx_ssl_private_key(cf, ssl, key, passwords) != NGX_OK)
++    {
++        return NGX_ERROR;
++    }
++    return NGX_OK;
++}
++
++
++ngx_int_t
++ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert)
++{
+     BIO         *bio;
+     X509        *x509;
+     u_long       n;
+-    ngx_str_t   *pwd;
+-    ngx_uint_t   tries;
+ 
+     if (ngx_conf_full_name(cf->cycle, cert, 1) != NGX_OK) {
+         return NGX_ERROR;
+@@ -388,6 +407,17 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+ 
+     BIO_free(bio);
+ 
++    return NGX_OK;
++}
++
++
++static ngx_int_t
++ngx_ssl_private_key(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *key,
++    ngx_array_t *passwords)
++{
++    ngx_str_t   *pwd;
++    ngx_uint_t   tries;
++
+     if (ngx_strncmp(key->data, "engine:", sizeof("engine:") - 1) == 0) {
+ 
+ #ifndef OPENSSL_NO_ENGINE
+-- 
+2.1.0
+

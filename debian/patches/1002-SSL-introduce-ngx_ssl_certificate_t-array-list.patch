@@ -1,0 +1,237 @@
+From bd83ca9aaf28e2f5a8efe941208a99d624206f82 Mon Sep 17 00:00:00 2001
+From: Brandon L Black <blblack@gmail.com>
+Date: Thu, 18 Jun 2015 14:08:17 +0000
+Subject: [PATCH 3/7] SSL: introduce ngx_ssl_certificate_t array list.
+ Preparation for Multi Server-Cert support.
+
+These patches are based on the ones from Filipe da Silva here:
+http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html
+01-AddCertList.diff
+ # HG changeset patch
+ # Parent  7f818f872a33fa2ab0c09942a17901a10bc8acf7
+---
+ src/event/ngx_event_openssl.c          | 71 +++++++++++++++++++++++++++++++---
+ src/event/ngx_event_openssl.h          |  5 +++
+ src/event/ngx_event_openssl_stapling.c | 41 ++++++++++++++++++--
+ 3 files changed, 108 insertions(+), 9 deletions(-)
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 3fee271..54507b9 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -18,6 +18,10 @@ typedef struct {
+ } ngx_openssl_conf_t;
+ 
+ 
++static ngx_int_t ngx_ssl_certificate_init(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_uint_t nbcerts);
++static ngx_uint_t ngx_ssl_certificate_push(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    X509 * x509);
+ static ngx_int_t ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *cert);
+ static ngx_int_t ngx_ssl_private_key(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -301,10 +305,57 @@ ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
+ }
+ 
+ 
++ngx_int_t 
++ngx_ssl_certificate_init(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_uint_t nbcerts)
++{
++    ngx_array_t    *certificates;
++
++    certificates = ngx_array_create(cf->pool, nbcerts,
++                                    sizeof(ngx_ssl_certificate_t));
++    if (certificates == NULL) {
++        return NGX_ERROR;
++    }
++
++    if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_certificate_index, certificates)
++        == 0)
++    {
++        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                         "SSL_CTX_set_ex_data() failed");
++        return NGX_ERROR;
++    }
++
++    return NGX_OK;
++}
++
++
++ngx_uint_t
++ngx_ssl_certificate_push(ngx_conf_t *cf, ngx_ssl_t *ssl, X509 * x509)
++{
++    ngx_array_t            *certificates;
++    ngx_ssl_certificate_t  *cert;
++
++    certificates = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++
++    cert = ngx_array_push(certificates);
++    if (cert == NULL) {
++        return -1;
++    }
++
++    cert->x509 = x509;
++
++    return certificates->nelts;
++}
++
++
+ ngx_int_t
+ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+     ngx_str_t *key, ngx_array_t *passwords)
+ {
++    /* Init server certificate list */
++    if (ngx_ssl_certificate_init(cf, ssl, 1U) != NGX_OK)
++    {
++        return NGX_ERROR;
++    }
+     /* load server certificate */
+     if (ngx_ssl_server_certificate(cf, ssl, cert) != NGX_OK)
+     {
+@@ -325,6 +376,7 @@ ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert)
+     BIO         *bio;
+     X509        *x509;
+     u_long       n;
++    ngx_uint_t   count;
+ 
+     if (ngx_conf_full_name(cf->cycle, cert, 1) != NGX_OK) {
+         return NGX_ERROR;
+@@ -359,11 +411,8 @@ ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert)
+         return NGX_ERROR;
+     }
+ 
+-    if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_certificate_index, x509)
+-        == 0)
+-    {
+-        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "SSL_CTX_set_ex_data() failed");
++    /* store cert for future use in stapling and sessions */
++    if ((count = ngx_ssl_certificate_push(cf, ssl,  x509)) <= 0) {
+         X509_free(x509);
+         BIO_free(bio);
+         return NGX_ERROR;
+@@ -2161,6 +2210,9 @@ ngx_ssl_session_id_context(ngx_ssl_t *ssl, ngx_str_t *sess_ctx)
+     STACK_OF(X509_NAME)  *list;
+     u_char                buf[EVP_MAX_MD_SIZE];
+ 
++    ngx_array_t            *certificates;
++    ngx_ssl_certificate_t  *certificate;
++
+     /*
+      * Session ID context is set based on the string provided,
+      * the server certificate, and the client CA list.
+@@ -2180,7 +2232,14 @@ ngx_ssl_session_id_context(ngx_ssl_t *ssl, ngx_str_t *sess_ctx)
+         goto failed;
+     }
+ 
+-    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++    certificates = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++    if (!certificates || certificates->nelts == 0) {
++        goto failed;
++    }
++    certificate = certificates->elts;
++
++    /* TOFIX: not only use just first one */
++    cert = certificate[0].x509;
+ 
+     if (X509_digest(cert, EVP_sha1(), buf, &len) == 0) {
+         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index 08eff64..004100c 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -45,6 +45,11 @@ typedef struct {
+ 
+ 
+ typedef struct {
++    X509                       *x509;
++} ngx_ssl_certificate_t;
++
++
++typedef struct {
+     ngx_ssl_conn_t             *connection;
+ 
+     ngx_int_t                   last;
+diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
+index 03ff540..e575ac6 100644
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -86,6 +86,10 @@ struct ngx_ssl_ocsp_ctx_s {
+ static ngx_int_t ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *file);
+ static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl);
++static ngx_int_t ngx_ssl_stapling_issuer_lookup(ngx_conf_t *cf, 
++    ngx_ssl_t *ssl, ngx_ssl_certificate_t *certificate);
++static ngx_int_t ngx_ssl_stapling_certid_push(ngx_ssl_stapling_t *staple, 
++    X509 *cert, X509 *issuer);
+ static ngx_int_t ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *responder);
+ 
+@@ -260,6 +264,29 @@ failed:
+ static ngx_int_t
+ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+ {
++    ngx_array_t            *certificates;
++    ngx_ssl_certificate_t  *certificate;
++
++    certificates = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++    if (!certificates || certificates->nelts == 0) {
++        return NGX_ERROR;
++    }
++
++    /* TOFIX: not only use just first one */
++    certificate = certificates->elts;
++
++    if (ngx_ssl_stapling_issuer_lookup(cf, ssl, certificate) != NGX_OK) {
++        return NGX_ERROR;
++    }
++    
++    return NGX_OK; 
++}
++
++
++static ngx_int_t
++ngx_ssl_stapling_issuer_lookup(ngx_conf_t *cf, ngx_ssl_t *ssl, 
++    ngx_ssl_certificate_t *certificate)
++{
+     int                  i, n, rc;
+     X509                *cert, *issuer;
+     X509_STORE          *store;
+@@ -268,7 +295,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+     ngx_ssl_stapling_t  *staple;
+ 
+     staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+-    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++    cert = certificate->x509;
+ 
+ #if OPENSSL_VERSION_NUMBER >= 0x10001000L
+     SSL_CTX_get_extra_chain_certs(ssl->ctx, &chain);
+@@ -289,8 +316,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+             ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ssl->log, 0,
+                            "SSL get issuer: found %p in extra certs", issuer);
+ 
+-            staple->cert = cert;
+-            staple->issuer = issuer;
++            ngx_ssl_stapling_certid_push(staple, cert, issuer); 
+ 
+             return NGX_OK;
+         }
+@@ -338,6 +364,15 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ssl->log, 0,
+                    "SSL get issuer: found %p in cert store", issuer);
+ 
++    ngx_ssl_stapling_certid_push(staple, cert, issuer); 
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t ngx_ssl_stapling_certid_push(ngx_ssl_stapling_t *staple, 
++    X509 *cert, X509 *issuer)
++{
+     staple->cert = cert;
+     staple->issuer = issuer;
+ 
+-- 
+2.1.0
+

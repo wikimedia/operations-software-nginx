@@ -1,3 +1,10 @@
 perl-use-dpkg-buildflags.patch
 # WMF-local patches:
 Stapling-File-Bugfix.patch
+# 1000-series is forward ports of http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html cleanly onto 1.9.2-1+wmf1 baseline
+1001-SSL-refactor-and-split-ngx_ssl_certificate-in-two.patch
+1002-SSL-introduce-ngx_ssl_certificate_t-array-list.patch
+1003-Stapling-SSL-add-Multiple-SSL-certificate-support.patch
+1004-Stapling-fixing-indentation.patch
+1005-SSL-add-Multiple-SSL-certificate-support-to-http-mod.patch
+1006-SSL-add-Multiple-SSL-certificate-support-to-other-mo.patch

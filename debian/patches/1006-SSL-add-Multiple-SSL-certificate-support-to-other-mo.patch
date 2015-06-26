@@ -1,0 +1,377 @@
+From 46b4de4d5cf5e7996871023af2912f889beb00d4 Mon Sep 17 00:00:00 2001
+From: Brandon L Black <blblack@gmail.com>
+Date: Thu, 18 Jun 2015 14:34:01 +0000
+Subject: [PATCH 7/7] SSL: add Multiple SSL certificate support to other
+ modules. OpenSSL >= 1.0.2 required.
+
+These patches are based on the ones from Filipe da Silva here:
+http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html
+05-MultiCertSupport2.patch
+ # HG changeset patch
+ # Parent  4a901ee83540eae0e3e7091bdc1b8d2c6dae33ef
+---
+ src/http/modules/ngx_http_proxy_module.c | 63 +++++++++++++++++++++++---------
+ src/http/modules/ngx_http_uwsgi_module.c | 61 ++++++++++++++++++++++---------
+ src/mail/ngx_mail_ssl_module.c           | 32 ++++++++--------
+ src/mail/ngx_mail_ssl_module.h           |  4 +-
+ 4 files changed, 108 insertions(+), 52 deletions(-)
+
+diff --git a/src/http/modules/ngx_http_proxy_module.c b/src/http/modules/ngx_http_proxy_module.c
+index 514c23b..70e8c93 100644
+--- a/src/http/modules/ngx_http_proxy_module.c
++++ b/src/http/modules/ngx_http_proxy_module.c
+@@ -97,8 +97,8 @@ typedef struct {
+     ngx_uint_t                     ssl_verify_depth;
+     ngx_str_t                      ssl_trusted_certificate;
+     ngx_str_t                      ssl_crl;
+-    ngx_str_t                      ssl_certificate;
+-    ngx_str_t                      ssl_certificate_key;
++    ngx_array_t                   *ssl_certificates;
++    ngx_array_t                   *ssl_certificate_keys;
+     ngx_array_t                   *ssl_passwords;
+ #endif
+ } ngx_http_proxy_loc_conf_t;
+@@ -672,16 +672,16 @@ static ngx_command_t  ngx_http_proxy_commands[] = {
+ 
+     { ngx_string("proxy_ssl_certificate"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+-      offsetof(ngx_http_proxy_loc_conf_t, ssl_certificate),
++      offsetof(ngx_http_proxy_loc_conf_t, ssl_certificates),
+       NULL },
+ 
+     { ngx_string("proxy_ssl_certificate_key"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+-      offsetof(ngx_http_proxy_loc_conf_t, ssl_certificate_key),
++      offsetof(ngx_http_proxy_loc_conf_t, ssl_certificate_keys),
+       NULL },
+ 
+     { ngx_string("proxy_ssl_password_file"),
+@@ -2858,6 +2858,8 @@ ngx_http_proxy_create_loc_conf(ngx_conf_t *cf)
+     conf->upstream.ssl_verify = NGX_CONF_UNSET;
+     conf->ssl_verify_depth = NGX_CONF_UNSET_UINT;
+     conf->ssl_passwords = NGX_CONF_UNSET_PTR;
++    conf->ssl_certificates = NGX_CONF_UNSET_PTR;
++    conf->ssl_certificate_keys = NGX_CONF_UNSET_PTR;
+ #endif
+ 
+     /* "proxy_cyclic_temp_file" is disabled */
+@@ -3188,10 +3190,11 @@ ngx_http_proxy_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+                               prev->ssl_trusted_certificate, "");
+     ngx_conf_merge_str_value(conf->ssl_crl, prev->ssl_crl, "");
+ 
+-    ngx_conf_merge_str_value(conf->ssl_certificate,
+-                              prev->ssl_certificate, "");
+-    ngx_conf_merge_str_value(conf->ssl_certificate_key,
+-                              prev->ssl_certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->ssl_certificates,
++                              prev->ssl_certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->ssl_certificate_keys,
++                              prev->ssl_certificate_keys, NULL);
++
+     ngx_conf_merge_ptr_value(conf->ssl_passwords, prev->ssl_passwords, NULL);
+ 
+     if (conf->ssl && ngx_http_proxy_set_ssl(cf, conf) != NGX_OK) {
+@@ -4278,6 +4281,7 @@ static ngx_int_t
+ ngx_http_proxy_set_ssl(ngx_conf_t *cf, ngx_http_proxy_loc_conf_t *plcf)
+ {
+     ngx_pool_cleanup_t  *cln;
++    ngx_str_t *oddkey;
+ 
+     plcf->upstream.ssl = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_t));
+     if (plcf->upstream.ssl == NULL) {
+@@ -4300,18 +4304,43 @@ ngx_http_proxy_set_ssl(ngx_conf_t *cf, ngx_http_proxy_loc_conf_t *plcf)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = plcf->upstream.ssl;
+ 
+-    if (plcf->ssl_certificate.len) {
++    if (plcf->ssl_certificates && plcf->ssl_certificates->nelts > 0) {
++
++        if (!plcf->ssl_certificate_keys
++            || plcf->ssl_certificate_keys->nelts
++                < plcf->ssl_certificates->nelts)
++        {
++
++            oddkey = plcf->ssl_certificates->elts;
+ 
+-        if (plcf->ssl_certificate_key.len == 0) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+-                          "no \"proxy_ssl_certificate_key\" is defined "
+-                          "for certificate \"%V\"", &plcf->ssl_certificate);
++                          "no \"proxy_ssl_certificate_key\" is defined for "
++                          "ssl certificate \"%V\"",
++                          oddkey[(plcf->ssl_certificate_keys)
++                                 ? plcf->ssl_certificate_keys->nelts
++                                 : 0]);
++
+             return NGX_ERROR;
+         }
+ 
+-        if (ngx_ssl_certificate(cf, plcf->upstream.ssl, &plcf->ssl_certificate,
+-                                &plcf->ssl_certificate_key, plcf->ssl_passwords)
+-            != NGX_OK)
++#ifndef SSL_CTX_add0_chain_cert
++        if (plcf->ssl_certificates->nelts > 1) {
++            /*
++             *   no multiple certificates support for OpenSSL < 1.0.2,
++             *   so we need to alarm user
++             */
++            ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                         "Multiple certificate configured "
++                         "in \"proxy_ssl_certificate\", "
++                         "but OpenSSL version < 1.0.2 used");
++            return NGX_ERROR;
++        }
++#endif
++
++        if (ngx_ssl_certificates(cf, plcf->upstream.ssl, plcf->ssl_certificates,
++                                 plcf->ssl_certificate_keys,
++                                 plcf->ssl_passwords)
++           != NGX_OK)
+         {
+             return NGX_ERROR;
+         }
+diff --git a/src/http/modules/ngx_http_uwsgi_module.c b/src/http/modules/ngx_http_uwsgi_module.c
+index a50c553..96913f1 100644
+--- a/src/http/modules/ngx_http_uwsgi_module.c
++++ b/src/http/modules/ngx_http_uwsgi_module.c
+@@ -54,8 +54,8 @@ typedef struct {
+     ngx_uint_t                 ssl_verify_depth;
+     ngx_str_t                  ssl_trusted_certificate;
+     ngx_str_t                  ssl_crl;
+-    ngx_str_t                  ssl_certificate;
+-    ngx_str_t                  ssl_certificate_key;
++    ngx_array_t               *ssl_certificates;
++    ngx_array_t               *ssl_certificate_keys;
+     ngx_array_t               *ssl_passwords;
+ #endif
+ } ngx_http_uwsgi_loc_conf_t;
+@@ -517,16 +517,16 @@ static ngx_command_t ngx_http_uwsgi_commands[] = {
+ 
+     { ngx_string("uwsgi_ssl_certificate"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+-      offsetof(ngx_http_uwsgi_loc_conf_t, ssl_certificate),
++      offsetof(ngx_http_uwsgi_loc_conf_t, ssl_certificates),
+       NULL },
+ 
+     { ngx_string("uwsgi_ssl_certificate_key"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+-      offsetof(ngx_http_uwsgi_loc_conf_t, ssl_certificate_key),
++      offsetof(ngx_http_uwsgi_loc_conf_t, ssl_certificate_keys),
+       NULL },
+ 
+     { ngx_string("uwsgi_ssl_password_file"),
+@@ -1430,6 +1430,8 @@ ngx_http_uwsgi_create_loc_conf(ngx_conf_t *cf)
+     conf->upstream.ssl_verify = NGX_CONF_UNSET;
+     conf->ssl_verify_depth = NGX_CONF_UNSET_UINT;
+     conf->ssl_passwords = NGX_CONF_UNSET_PTR;
++    conf->ssl_certificates = NGX_CONF_UNSET_PTR;
++    conf->ssl_certificate_keys = NGX_CONF_UNSET_PTR;
+ #endif
+ 
+     /* "uwsgi_cyclic_temp_file" is disabled */
+@@ -1743,11 +1745,10 @@ ngx_http_uwsgi_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child)
+     ngx_conf_merge_str_value(conf->ssl_trusted_certificate,
+                               prev->ssl_trusted_certificate, "");
+     ngx_conf_merge_str_value(conf->ssl_crl, prev->ssl_crl, "");
+-
+-    ngx_conf_merge_str_value(conf->ssl_certificate,
+-                              prev->ssl_certificate, "");
+-    ngx_conf_merge_str_value(conf->ssl_certificate_key,
+-                              prev->ssl_certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->ssl_certificates,
++                             prev->ssl_certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->ssl_certificate_keys,
++                             prev->ssl_certificate_keys, NULL);
+     ngx_conf_merge_ptr_value(conf->ssl_passwords, prev->ssl_passwords, NULL);
+ 
+     if (conf->ssl && ngx_http_uwsgi_set_ssl(cf, conf) != NGX_OK) {
+@@ -2284,6 +2285,7 @@ static ngx_int_t
+ ngx_http_uwsgi_set_ssl(ngx_conf_t *cf, ngx_http_uwsgi_loc_conf_t *uwcf)
+ {
+     ngx_pool_cleanup_t  *cln;
++    ngx_str_t           *oddkey;
+ 
+     uwcf->upstream.ssl = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_t));
+     if (uwcf->upstream.ssl == NULL) {
+@@ -2306,17 +2308,42 @@ ngx_http_uwsgi_set_ssl(ngx_conf_t *cf, ngx_http_uwsgi_loc_conf_t *uwcf)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = uwcf->upstream.ssl;
+ 
+-    if (uwcf->ssl_certificate.len) {
++    if (uwcf->ssl_certificates && uwcf->ssl_certificates->nelts > 0) {
++
++        if (!uwcf->ssl_certificate_keys
++            || uwcf->ssl_certificate_keys->nelts
++                < uwcf->ssl_certificates->nelts)
++        {
++
++            oddkey = uwcf->ssl_certificates->elts;
+ 
+-        if (uwcf->ssl_certificate_key.len == 0) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+-                          "no \"uwsgi_ssl_certificate_key\" is defined "
+-                          "for certificate \"%V\"", &uwcf->ssl_certificate);
++                          "no \"uwsgi_ssl_certificate_key\" is defined for "
++                          "ssl certificate \"%V\"",
++                          oddkey[(uwcf->ssl_certificate_keys)
++                                 ? uwcf->ssl_certificate_keys->nelts
++                                 : 0]);
++
+             return NGX_ERROR;
+         }
+ 
+-        if (ngx_ssl_certificate(cf, uwcf->upstream.ssl, &uwcf->ssl_certificate,
+-                                &uwcf->ssl_certificate_key, uwcf->ssl_passwords)
++#ifndef SSL_CTX_add0_chain_cert
++        if (uwcf->ssl_certificates->nelts > 1) {
++            /*
++             *   no multiple certificates support for OpenSSL < 1.0.2,
++             *   so we need to alarm user
++             */
++            ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                            "Multiple certificate configured "
++                            "in \"uwsgi_ssl_certificate\", but "
++                            "OpenSSL < 1.0.2 used");
++            return NGX_ERROR;
++        }
++#endif
++
++        if (ngx_ssl_certificates(cf, uwcf->upstream.ssl, uwcf->ssl_certificates,
++                                 uwcf->ssl_certificate_keys,
++                                 uwcf->ssl_passwords)
+             != NGX_OK)
+         {
+             return NGX_ERROR;
+diff --git a/src/mail/ngx_mail_ssl_module.c b/src/mail/ngx_mail_ssl_module.c
+index 1075410..3869243 100644
+--- a/src/mail/ngx_mail_ssl_module.c
++++ b/src/mail/ngx_mail_ssl_module.c
+@@ -73,16 +73,16 @@ static ngx_command_t  ngx_mail_ssl_commands[] = {
+ 
+     { ngx_string("ssl_certificate"),
+       NGX_MAIL_MAIN_CONF|NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_MAIL_SRV_CONF_OFFSET,
+-      offsetof(ngx_mail_ssl_conf_t, certificate),
++      offsetof(ngx_mail_ssl_conf_t, certificates),
+       NULL },
+ 
+     { ngx_string("ssl_certificate_key"),
+       NGX_MAIL_MAIN_CONF|NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_MAIL_SRV_CONF_OFFSET,
+-      offsetof(ngx_mail_ssl_conf_t, certificate_key),
++      offsetof(ngx_mail_ssl_conf_t, certificate_keys),
+       NULL },
+ 
+     { ngx_string("ssl_password_file"),
+@@ -238,8 +238,6 @@ ngx_mail_ssl_create_conf(ngx_conf_t *cf)
+      * set by ngx_pcalloc():
+      *
+      *     scf->protocols = 0;
+-     *     scf->certificate = { 0, NULL };
+-     *     scf->certificate_key = { 0, NULL };
+      *     scf->dhparam = { 0, NULL };
+      *     scf->ecdh_curve = { 0, NULL };
+      *     scf->client_certificate = { 0, NULL };
+@@ -250,6 +248,8 @@ ngx_mail_ssl_create_conf(ngx_conf_t *cf)
+      */
+ 
+     scf->enable = NGX_CONF_UNSET;
++    scf->certificates = NGX_CONF_UNSET_PTR;
++    scf->certificate_keys = NGX_CONF_UNSET_PTR;
+     scf->starttls = NGX_CONF_UNSET_UINT;
+     scf->passwords = NGX_CONF_UNSET_PTR;
+     scf->prefer_server_ciphers = NGX_CONF_UNSET;
+@@ -290,8 +290,9 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+     ngx_conf_merge_uint_value(conf->verify, prev->verify, 0);
+     ngx_conf_merge_uint_value(conf->verify_depth, prev->verify_depth, 1);
+ 
+-    ngx_conf_merge_str_value(conf->certificate, prev->certificate, "");
+-    ngx_conf_merge_str_value(conf->certificate_key, prev->certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->certificates, prev->certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->certificate_keys, prev->certificate_keys,
++                        NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->passwords, prev->passwords, NULL);
+ 
+@@ -328,7 +329,7 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     if (*mode) {
+ 
+-        if (conf->certificate.len == 0) {
++        if (!conf->certificates || conf->certificates->nelts == 0) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate\" is defined for "
+                           "the \"%s\" directive in %s:%ui",
+@@ -336,7 +337,7 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+             return NGX_CONF_ERROR;
+         }
+ 
+-        if (conf->certificate_key.len == 0) {
++        if (!conf->certificate_keys || conf->certificate_keys->nelts == 0) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate_key\" is defined for "
+                           "the \"%s\" directive in %s:%ui",
+@@ -346,15 +347,14 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     } else {
+ 
+-        if (conf->certificate.len == 0) {
++        if (!conf->certificates || conf->certificates->nelts == 0) {
+             return NGX_CONF_OK;
+         }
+ 
+-        if (conf->certificate_key.len == 0) {
++        if (!conf->certificate_keys || conf->certificate_keys->nelts == 0) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate_key\" is defined "
+-                          "for certificate \"%V\"",
+-                          &conf->certificate);
++                          "for certificate \"%V\"", &conf->certificates[0]);
+             return NGX_CONF_ERROR;
+         }
+     }
+@@ -371,8 +371,8 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = &conf->ssl;
+ 
+-    if (ngx_ssl_certificate(cf, &conf->ssl, &conf->certificate,
+-                            &conf->certificate_key, conf->passwords)
++    if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
++                            conf->certificate_keys, conf->passwords)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+diff --git a/src/mail/ngx_mail_ssl_module.h b/src/mail/ngx_mail_ssl_module.h
+index 296a6a2..0753e26 100644
+--- a/src/mail/ngx_mail_ssl_module.h
++++ b/src/mail/ngx_mail_ssl_module.h
+@@ -35,8 +35,8 @@ typedef struct {
+ 
+     time_t           session_timeout;
+ 
+-    ngx_str_t        certificate;
+-    ngx_str_t        certificate_key;
++    ngx_array_t     *certificates;
++    ngx_array_t     *certificate_keys;
+     ngx_str_t        dhparam;
+     ngx_str_t        ecdh_curve;
+     ngx_str_t        client_certificate;
+-- 
+2.1.0
+
