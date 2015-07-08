@@ -20,10 +20,10 @@ http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html
  1 file changed, 51 insertions(+), 52 deletions(-)
 
 diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
-index 5ceb5dc..4d53fb5 100644
+index 72392a8..5622b65 100644
 --- a/src/event/ngx_event_openssl_stapling.c
 +++ b/src/event/ngx_event_openssl_stapling.c
-@@ -693,43 +693,43 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -694,43 +694,43 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
  
      for (i = 0; i < nelts; i++, cert++, issuer++) {
  
@@ -99,7 +99,7 @@ index 5ceb5dc..4d53fb5 100644
      }   /* END OF For each 'cert/issuer' pair */
     
      OCSP_BASICRESP_free(basic);
-@@ -1244,15 +1244,14 @@ ngx_ssl_ocsp_dummy_handler(ngx_event_t *ev)
+@@ -1245,15 +1245,14 @@ ngx_ssl_ocsp_dummy_handler(ngx_event_t *ev)
  static ngx_int_t
  ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
  {
@@ -122,7 +122,7 @@ index 5ceb5dc..4d53fb5 100644
      ngx_ssl_certificate_t  *cert;
      ngx_ssl_certificate_t  *issuer;
  
-@@ -1269,19 +1268,19 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -1270,19 +1269,19 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
  
      for (i = 0; i < nelts; i++, cert++, issuer++) {
  
@@ -154,6 +154,3 @@ index 5ceb5dc..4d53fb5 100644
      }   /* END OF For each 'cert/issuer' pair */
  
      len = i2d_OCSP_REQUEST(ocsp, NULL);
--- 
-2.1.0
-

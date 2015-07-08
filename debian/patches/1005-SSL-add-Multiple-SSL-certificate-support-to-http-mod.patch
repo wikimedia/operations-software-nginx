@@ -101,10 +101,10 @@ index 004100c..fbbbc0c 100644
      ngx_str_t *cert, ngx_int_t depth);
  ngx_int_t ngx_ssl_trusted_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
 diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
-index 4d53fb5..5724ed5 100644
+index 5622b65..715390f 100644
 --- a/src/event/ngx_event_openssl_stapling.c
 +++ b/src/event/ngx_event_openssl_stapling.c
-@@ -288,6 +288,7 @@ ngx_ssl_stapling_issuer_init(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_int_t nbcerts)
+@@ -289,6 +289,7 @@ ngx_ssl_stapling_issuer_init(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_int_t nbcerts)
  static ngx_int_t
  ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
  {
@@ -112,7 +112,7 @@ index 4d53fb5..5724ed5 100644
      ngx_array_t            *certificates;
      ngx_ssl_certificate_t  *certificate;
  
-@@ -296,12 +297,19 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+@@ -297,12 +298,19 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
          return NGX_ERROR;
      }
  
@@ -277,6 +277,3 @@ index 8e69e9e..d4d1397 100644
      ngx_str_t                       dhparam;
      ngx_str_t                       ecdh_curve;
      ngx_str_t                       client_certificate;
--- 
-2.1.0
-

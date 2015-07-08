@@ -15,7 +15,7 @@ http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html
  1 file changed, 89 insertions(+), 19 deletions(-)
 
 diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
-index e575ac6..5ceb5dc 100644
+index 5971668..72392a8 100644
 --- a/src/event/ngx_event_openssl_stapling.c
 +++ b/src/event/ngx_event_openssl_stapling.c
 @@ -28,8 +28,8 @@ typedef struct {
@@ -49,7 +49,7 @@ index e575ac6..5ceb5dc 100644
  static ngx_int_t ngx_ssl_stapling_issuer_lookup(ngx_conf_t *cf, 
      ngx_ssl_t *ssl, ngx_ssl_certificate_t *certificate);
  static ngx_int_t ngx_ssl_stapling_certid_push(ngx_ssl_stapling_t *staple, 
-@@ -262,6 +264,28 @@ failed:
+@@ -263,6 +265,28 @@ failed:
  
  
  static ngx_int_t
@@ -78,7 +78,7 @@ index e575ac6..5ceb5dc 100644
  ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
  {
      ngx_array_t            *certificates;
-@@ -272,6 +296,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+@@ -273,6 +297,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
          return NGX_ERROR;
      }
  
@@ -86,7 +86,7 @@ index e575ac6..5ceb5dc 100644
      /* TOFIX: not only use just first one */
      certificate = certificates->elts;
  
-@@ -373,8 +398,19 @@ ngx_ssl_stapling_issuer_lookup(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -374,8 +399,19 @@ ngx_ssl_stapling_issuer_lookup(ngx_conf_t *cf, ngx_ssl_t *ssl,
  static ngx_int_t ngx_ssl_stapling_certid_push(ngx_ssl_stapling_t *staple, 
      X509 *cert, X509 *issuer)
  {
@@ -108,7 +108,7 @@ index e575ac6..5ceb5dc 100644
  
      return NGX_OK;
  }
-@@ -386,15 +422,17 @@ ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *responder)
+@@ -387,15 +423,17 @@ ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *responder)
      ngx_url_t                  u;
      char                      *s;
      ngx_ssl_stapling_t        *staple;
@@ -128,7 +128,7 @@ index e575ac6..5ceb5dc 100644
          if (aia == NULL) {
              ngx_log_error(NGX_LOG_WARN, ssl->log, 0,
                            "\"ssl_stapling\" ignored, "
-@@ -542,8 +580,8 @@ ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple)
+@@ -543,8 +581,8 @@ ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple)
          return;
      }
  
@@ -139,7 +139,7 @@ index e575ac6..5ceb5dc 100644
  
      ctx->addrs = staple->addrs;
      ctx->host = staple->host;
-@@ -574,6 +612,7 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -575,6 +613,7 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
      size_t                 len;
      time_t                 now, valid;
      ngx_str_t              response;
@@ -147,7 +147,7 @@ index e575ac6..5ceb5dc 100644
      X509_STORE            *store;
      STACK_OF(X509)        *chain;
      OCSP_CERTID           *id;
-@@ -581,6 +620,8 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -582,6 +621,8 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
      OCSP_BASICRESP        *basic;
      ngx_ssl_stapling_t    *staple;
      ASN1_GENERALIZEDTIME  *thisupdate, *nextupdate;
@@ -156,7 +156,7 @@ index e575ac6..5ceb5dc 100644
  
      staple = ctx->data;
      now = ngx_time();
-@@ -634,15 +675,25 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -635,15 +676,25 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
  #endif
  
      if (OCSP_basic_verify(basic, chain, store,
@@ -186,7 +186,7 @@ index e575ac6..5ceb5dc 100644
      if (id == NULL) {
          ngx_ssl_error(NGX_LOG_CRIT, ctx->log, 0,
                        "OCSP_cert_to_id() failed");
-@@ -679,6 +730,8 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -680,6 +731,8 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
      }
  
      OCSP_CERTID_free(id);
@@ -195,7 +195,7 @@ index e575ac6..5ceb5dc 100644
      OCSP_BASICRESP_free(basic);
      OCSP_RESPONSE_free(ocsp);
  
-@@ -777,10 +830,16 @@ ngx_ssl_stapling_time(ASN1_GENERALIZEDTIME *asn1time)
+@@ -778,10 +831,16 @@ ngx_ssl_stapling_time(ASN1_GENERALIZEDTIME *asn1time)
  static void
  ngx_ssl_stapling_cleanup(void *data)
  {
@@ -216,7 +216,7 @@ index e575ac6..5ceb5dc 100644
      }
  
      if (staple->staple.data) {
-@@ -1193,6 +1252,10 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -1194,6 +1253,10 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
      OCSP_CERTID   *id;
      OCSP_REQUEST  *ocsp;
  
@@ -227,7 +227,7 @@ index e575ac6..5ceb5dc 100644
      ocsp = OCSP_REQUEST_new();
      if (ocsp == NULL) {
          ngx_ssl_error(NGX_LOG_CRIT, ctx->log, 0,
-@@ -1200,7 +1263,13 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -1201,7 +1264,13 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
          return NGX_ERROR;
      }
  
@@ -242,7 +242,7 @@ index e575ac6..5ceb5dc 100644
      if (id == NULL) {
          ngx_ssl_error(NGX_LOG_CRIT, ctx->log, 0,
                        "OCSP_cert_to_id() failed");
-@@ -1213,6 +1282,7 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -1214,6 +1283,7 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
          OCSP_CERTID_free(id);
          goto failed;
      }
@@ -250,6 +250,3 @@ index e575ac6..5ceb5dc 100644
  
      len = i2d_OCSP_REQUEST(ocsp, NULL);
      if (len <= 0) {
--- 
-2.1.0
-

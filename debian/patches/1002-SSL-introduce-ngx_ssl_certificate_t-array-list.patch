@@ -153,7 +153,7 @@ index 08eff64..004100c 100644
  
      ngx_int_t                   last;
 diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
-index 03ff540..e575ac6 100644
+index 60051ad..5971668 100644
 --- a/src/event/ngx_event_openssl_stapling.c
 +++ b/src/event/ngx_event_openssl_stapling.c
 @@ -86,6 +86,10 @@ struct ngx_ssl_ocsp_ctx_s {
@@ -167,7 +167,7 @@ index 03ff540..e575ac6 100644
  static ngx_int_t ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
      ngx_str_t *responder);
  
-@@ -260,6 +264,29 @@ failed:
+@@ -261,6 +265,29 @@ failed:
  static ngx_int_t
  ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
  {
@@ -197,7 +197,7 @@ index 03ff540..e575ac6 100644
      int                  i, n, rc;
      X509                *cert, *issuer;
      X509_STORE          *store;
-@@ -268,7 +295,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+@@ -269,7 +296,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
      ngx_ssl_stapling_t  *staple;
  
      staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
@@ -206,7 +206,7 @@ index 03ff540..e575ac6 100644
  
  #if OPENSSL_VERSION_NUMBER >= 0x10001000L
      SSL_CTX_get_extra_chain_certs(ssl->ctx, &chain);
-@@ -289,8 +316,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+@@ -290,8 +317,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
              ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ssl->log, 0,
                             "SSL get issuer: found %p in extra certs", issuer);
  
@@ -216,7 +216,7 @@ index 03ff540..e575ac6 100644
  
              return NGX_OK;
          }
-@@ -338,6 +364,15 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+@@ -339,6 +365,15 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
      ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ssl->log, 0,
                     "SSL get issuer: found %p in cert store", issuer);
  
@@ -232,6 +232,3 @@ index 03ff540..e575ac6 100644
      staple->cert = cert;
      staple->issuer = issuer;
  
--- 
-2.1.0
-
