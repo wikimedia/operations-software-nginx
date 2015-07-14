@@ -1,3 +1,10 @@
+nginx (1.9.3-1+wmf1) jessie-wikimedia; urgency=medium
+
+  * Filipe da Silva's multicert patches ported onto 1.9.3-1
+  * libssl-dev dep set to >= 1.0.2 (for the above)
+
+ -- Brandon Black <bblack@wikimedia.org>  Tue, 14 Jul 2015 22:36:48 +0000
+
 nginx (1.9.3-1) unstable; urgency=medium
 
   [ Christos Trochalakis]
