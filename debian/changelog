@@ -1,3 +1,11 @@
+nginx (1.9.3-1+wmf2) jessie-wikimedia; urgency=medium
+
+  * Ported newer (Apr 27) patchset from Filipe onto 1.9.3-1, replacing the
+    Mar 30 variant used in +wmf1, and adds a follow-on local patch for
+    multicert support in the stream modules
+
+ -- Brandon Black <bblack@wikimedia.org>  Sun, 09 Aug 2015 20:11:48 +0000
+
 nginx (1.9.3-1+wmf1) jessie-wikimedia; urgency=medium
 
   * Filipe da Silva's multicert patches ported onto 1.9.3-1
