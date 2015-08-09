@@ -1,0 +1,231 @@
+----------- Original nginx-devel post --------------------------------------
+Hi, 
+
+This is my last  version of 'Multiple server certificates support ' patches.
+
+I restaged the changes in a more smart way.
+It is more respectful of 'contributing' requirements.
+
+It relies on OpenSSL to maintain a list of server certificates.
+It now stores a stapling context within/for each server certificate. 
+
+Reviews and comments are welcome.
+
+Regards,
+Filipe da Silva
+Ingima
+
+---
+# HG changeset patch
+# User Filipe da Silva <fdasilva at ingima.com>
+# Date 1430147821 -7200
+#      Mon Apr 27 17:17:01 2015 +0200
+# Node ID 0ac2a8668f852b604d46ff858199650bd3003fdb
+# Parent  fc99323a3d790dcc7b87121261b4236d098336de
+SSL: introduce support of last openssl 1.0.2 features.
+
+Rely on openSSL 1.0.2 internals to manage the server certificate list and
+replace the previous SSL_CTX_ex_data(ngx_ssl_certificate_index, ...) storage.
+
+Add two new server certificate accessor methods to encapsulate this change:
+ngx_ssl_get_server_certificate & ngx_ssl_get_next_server_certificate.
+
+Add guards around ngx_ssl_stapling_index init when OCSP stapling is unsupported.
+
+Compatible with 'stable-1.8'.
+------- End original nginx-devel post --------------------------------------
+
+WMF notes: applied to 1.9.3 with only one trivial manual context fixup, patch
+below is amended to apply cleanly
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 1b789e6..982ef24 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -168,6 +168,7 @@ ngx_ssl_init(ngx_log_t *log)
+         return NGX_ERROR;
+     }
+ 
++#if OPENSSL_VERSION_NUMBER < 0x10002000L
+     ngx_ssl_certificate_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL,
+                                                          NULL);
+     if (ngx_ssl_certificate_index == -1) {
+@@ -175,7 +176,9 @@ ngx_ssl_init(ngx_log_t *log)
+                       "SSL_CTX_get_ex_new_index() failed");
+         return NGX_ERROR;
+     }
++#endif
+ 
++#if (!defined OPENSSL_NO_OCSP && defined SSL_CTRL_SET_TLSEXT_STATUS_REQ_CB)
+     ngx_ssl_stapling_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL,
+                                                       NULL);
+     if (ngx_ssl_stapling_index == -1) {
+@@ -183,6 +186,7 @@ ngx_ssl_init(ngx_log_t *log)
+                       "SSL_CTX_get_ex_new_index() failed");
+         return NGX_ERROR;
+     }
++#endif
+ 
+     return NGX_OK;
+ }
+@@ -297,6 +301,33 @@ ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
+ }
+ 
+ 
++X509*
++ngx_ssl_get_server_certificate(ngx_ssl_t *ssl)
++{
++#if OPENSSL_VERSION_NUMBER >= 0x10002000L
++    if (SSL_CTX_set_current_cert(ssl->ctx, SSL_CERT_SET_FIRST)) {
++        return (SSL_CTX_get0_certificate(ssl->ctx));
++    }
++    return NULL;
++#else
++
++    return (SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index));
++#endif
++}
++
++
++X509*
++ngx_ssl_get_next_server_certificate(ngx_ssl_t *ssl)
++{
++#if OPENSSL_VERSION_NUMBER >= 0x10002000L
++    if (SSL_CTX_set_current_cert(ssl->ctx, SSL_CERT_SET_NEXT)) {
++        return (SSL_CTX_get0_certificate(ssl->ctx));
++    }
++#endif
++    return NULL;
++}
++
++
+ ngx_int_t
+ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+     ngx_str_t *key, ngx_array_t *passwords)
+@@ -340,6 +371,7 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+         return NGX_ERROR;
+     }
+ 
++#if OPENSSL_VERSION_NUMBER < 0x10002000L
+     if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_certificate_index, x509)
+         == 0)
+     {
+@@ -349,6 +381,7 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+         BIO_free(bio);
+         return NGX_ERROR;
+     }
++#endif
+ 
+     X509_free(x509);
+ 
+@@ -376,10 +409,21 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+             return NGX_ERROR;
+         }
+ 
++#ifdef SSL_CTX_add0_chain_cert
++        /*
++         * OpenSSL >=1.0.2 allows multiple server certificates in a single
++         * SSL_CTX to each have a different chain
++         */
++        if (SSL_CTX_add0_chain_cert(ssl->ctx, x509) == 0) {
++            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                          "SSL_CTX_add0_chain_cert(\"%s\") failed",
++                          cert->data);
++#else
+         if (SSL_CTX_add_extra_chain_cert(ssl->ctx, x509) == 0) {
+             ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+                           "SSL_CTX_add_extra_chain_cert(\"%s\") failed",
+                           cert->data);
++#endif
+             X509_free(x509);
+             BIO_free(bio);
+             return NGX_ERROR;
+@@ -2150,7 +2194,7 @@ ngx_ssl_session_id_context(ngx_ssl_t *ssl, ngx_str_t *sess_ctx)
+         goto failed;
+     }
+ 
+-    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++    cert = ngx_ssl_get_server_certificate(ssl);
+ 
+     if (X509_digest(cert, EVP_sha1(), buf, &len) == 0) {
+         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index 08eff64..d7d0381 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -189,6 +189,8 @@ ngx_int_t ngx_ssl_get_fingerprint(ngx_connection_t *c, ngx_pool_t *pool,
+     ngx_str_t *s);
+ ngx_int_t ngx_ssl_get_client_verify(ngx_connection_t *c, ngx_pool_t *pool,
+     ngx_str_t *s);
++X509* ngx_ssl_get_server_certificate(ngx_ssl_t *ssl);
++X509* ngx_ssl_get_next_server_certificate(ngx_ssl_t *ssl);
+ 
+ 
+ ngx_int_t ngx_ssl_handshake(ngx_connection_t *c);
+@@ -208,7 +210,6 @@ extern int  ngx_ssl_connection_index;
+ extern int  ngx_ssl_server_conf_index;
+ extern int  ngx_ssl_session_cache_index;
+ extern int  ngx_ssl_session_ticket_keys_index;
+-extern int  ngx_ssl_certificate_index;
+ extern int  ngx_ssl_stapling_index;
+ 
+ 
+diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
+index fa77678..a4f5679 100644
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -269,9 +269,11 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+     ngx_ssl_stapling_t  *staple;
+ 
+     staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+-    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++    cert = ngx_ssl_get_server_certificate(ssl->ctx);
+ 
+-#if OPENSSL_VERSION_NUMBER >= 0x10001000L
++#ifdef SSL_CTX_get0_chain_certs
++    SSL_CTX_get0_chain_certs(ssl->ctx, &chain);
++#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
+     SSL_CTX_get_extra_chain_certs(ssl->ctx, &chain);
+ #else
+     chain = ssl->ctx->extra_certs;
+@@ -538,6 +540,7 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+     u_char                *p;
+     int                    n;
+     size_t                 len;
++    unsigned long          flags;
+     time_t                 now, valid;
+     ngx_str_t              response;
+     X509_STORE            *store;
+@@ -593,15 +596,28 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+         goto error;
+     }
+ 
+-#if OPENSSL_VERSION_NUMBER >= 0x10001000L
++#ifdef SSL_CTX_get0_chain_certs
++    SSL_CTX_get0_chain_certs(staple->ssl_ctx, &chain);
++#elif OPENSSL_VERSION_NUMBER >= 0x10001000L
+     SSL_CTX_get_extra_chain_certs(staple->ssl_ctx, &chain);
+ #else
+     chain = staple->ssl_ctx->extra_certs;
+ #endif
+ 
+-    if (OCSP_basic_verify(basic, chain, store,
+-                          staple->verify ? OCSP_TRUSTOTHER : OCSP_NOVERIFY)
+-        != 1)
++    flags = staple->verify ? OCSP_TRUSTOTHER : OCSP_NOVERIFY;
++
++#if OPENSSL_VERSION_NUMBER < 0x10000000L
++    /*
++     * ECDSA/SHA-2 signature verification not supported.
++     * Released with OpenSSL 1.0.0 [29 Mar 2010]
++     *  *) Add support for dsa-with-SHA224 and dsa-with-SHA256.
++     * See openssl commit 06e2dd037e29f82b92e1d1b9454f1595e602fb94
++     */
++    flags = flags | OCSP_NOSIGS;
++    /* TODO: improve case handling */
++#endif
++
++    if (OCSP_basic_verify(basic, chain, store, flags) != 1)
+     {
+         ngx_ssl_error(NGX_LOG_ERR, ctx->log, 0,
+                       "OCSP_basic_verify() failed");

@@ -1,8 +1,9 @@
 perl-use-dpkg-buildflags.patch
-# 1000-series is forward ports of http://mailman.nginx.org/pipermail/nginx-devel/2015-March/006734.html cleanly onto 1.9.2-1+wmf1 baseline
-1001-SSL-refactor-and-split-ngx_ssl_certificate-in-two.patch
-1002-SSL-introduce-ngx_ssl_certificate_t-array-list.patch
-1003-Stapling-SSL-add-Multiple-SSL-certificate-support.patch
-1004-Stapling-fixing-indentation.patch
-1005-SSL-add-Multiple-SSL-certificate-support-to-http-mod.patch
-1006-SSL-add-Multiple-SSL-certificate-support-to-other-mo.patch
+# 1000-series is forward ports of multi-cert patches from Filipe da Silva
+# circa 2015-04-27, onto nginx-1.9.3, from the 5 posts starting here:
+# http://mailman.nginx.org/pipermail/nginx-devel/2015-April/006863.html
+1001-openssl102.patch
+1002-stapling-per-cert.patch
+1003-stapling-multi-cert.patch
+1004-cert-list.patch
+1005-multicert-modules.patch

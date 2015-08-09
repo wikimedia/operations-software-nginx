@@ -1,0 +1,134 @@
+----------- Original nginx-devel post --------------------------------------
+# HG changeset patch
+# User Filipe da Silva <fdasilva at ingima.com>
+# Date 1430147821 -7200
+#      Mon Apr 27 17:17:01 2015 +0200
+# Node ID 1b79826c93a4822fa3c11bc4139ca76e5189b14c
+# Parent  caabe5c77b51274237d7c49fffb864a27ca0a25f
+OCSP Stapling: introduce multiple cert support.
+
+Loop on each certificate to init his respective stapling context.
+
+Compatible with 'stable-1.8'
+------- End original nginx-devel post --------------------------------------
+
+WMF notes: applied to 1.9.3 without failure, this patch just readjusts offsets
+
+diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
+index 16ddf18..91573aa 100644
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -94,9 +94,10 @@ struct ngx_ssl_ocsp_ctx_s {
+ 
+ static ngx_int_t ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *file, ngx_ssl_staple_conf_t *conf);
+-static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl);
++static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    X509 *cert);
+ static ngx_int_t ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *responder);
++    ngx_str_t *responder, X509 *cert);
+ 
+ static int ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn,
+     void *data);
+@@ -131,8 +132,9 @@ ngx_int_t
+ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+     ngx_str_t *responder, ngx_uint_t verify)
+ {
+-    ngx_int_t                  rc;
++    ngx_int_t                  rc, res;
+     ngx_ssl_staple_conf_t     *conf;
++    X509                      *cert;
+ 
+     conf = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_staple_conf_t));
+     if (conf == NULL) {
+@@ -160,24 +162,30 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+         goto done;
+     }
+ 
+-    rc = ngx_ssl_stapling_issuer(cf, ssl);
++    res = NGX_DECLINED;
++    cert = ngx_ssl_get_server_certificate(ssl);
+ 
+-    if (rc == NGX_DECLINED) {
+-        return NGX_OK;
+-    }
++    while (cert) {
++        rc = ngx_ssl_stapling_issuer(cf, ssl, cert);
+ 
+-    if (rc != NGX_OK) {
+-        return NGX_ERROR;
+-    }
++        if (rc == NGX_OK) {
++            rc = ngx_ssl_stapling_responder(cf, ssl, responder, cert);
++        }
+ 
+-    rc = ngx_ssl_stapling_responder(cf, ssl, responder);
++        if (rc == NGX_OK) {
++            /* result becomes OK when at least one cert is OK */
++            res = NGX_OK;
++        } else if (rc == NGX_DECLINED) {
++            rc = NGX_OK;
++        } else {
++            return NGX_ERROR;
++        }
+ 
+-    if (rc == NGX_DECLINED) {
+-        return NGX_OK;
++        cert = ngx_ssl_get_next_server_certificate(ssl);
+     }
+ 
+-    if (rc != NGX_OK) {
+-        return NGX_ERROR;
++    if (res == NGX_DECLINED) {
++        return NGX_OK;
+     }
+ 
+ done:
+@@ -257,18 +265,16 @@ failed:
+ 
+ 
+ static ngx_int_t
+-ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
++ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl, X509 *cert)
+ {
+     int                  i, n, rc;
+-    X509                *cert, *issuer;
++    X509                *issuer;
+     X509_STORE          *store;
+     X509_STORE_CTX      *store_ctx;
+     STACK_OF(X509)      *chain;
+     ngx_ssl_stapling_t  *staple;
+     ngx_pool_cleanup_t  *cln;
+ 
+-    cert = ngx_ssl_get_server_certificate(ssl->ctx);
+-
+     staple = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_stapling_t));
+     if (staple == NULL) {
+         return NGX_ERROR;
+@@ -370,22 +376,21 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+ 
+ 
+ static ngx_int_t
+-ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *responder)
++ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *responder,
++    X509 *cert)
+ {
+     ngx_url_t                  u;
+     char                      *s;
+     ngx_ssl_stapling_t        *staple;
+-    X509                      *cert;
+     STACK_OF(OPENSSL_STRING)  *aia;
+ 
+-    cert = ngx_ssl_get_server_certificate(ssl);
+     staple = X509_get_ex_data(cert, ngx_ssl_cert_stapling_index);
+ 
+     if (responder->len == 0) {
+ 
+         /* extract OCSP responder URL from certificate */
+ 
+-        aia = X509_get1_ocsp(staple->cert);
++        aia = X509_get1_ocsp(cert);
+         if (aia == NULL) {
+             ngx_log_error(NGX_LOG_WARN, ssl->log, 0,
+                           "\"ssl_stapling\" ignored, "
