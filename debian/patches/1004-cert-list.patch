@@ -1,0 +1,144 @@
+----------- Original nginx-devel post --------------------------------------
+# HG changeset patch
+# User Filipe da Silva <fdasilva at ingima.com>
+# Date 1430147821 -7200
+#      Mon Apr 27 17:17:01 2015 +0200
+# Node ID e465a170ec3889eef1ab2d5d9f59cf8b12e97055
+# Parent  1b79826c93a4822fa3c11bc4139ca76e5189b14c
+SSL: introduce certificate list support.
+
+Arguments are now a list of certificates and list of keys.
+Split ngx_ssl_certificate to loop separately on cert and keys.
+SSL session_id_context value is build with every configured certificate.
+
+Compatible with 'stable-1.8'
+------- End original nginx-devel post --------------------------------------
+
+WMF notes: applied to 1.9.3 completely clean
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 0dbb203..867bd4f 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -33,6 +33,10 @@ static void ngx_ssl_connection_error(ngx_connection_t *c, int sslerr,
+     ngx_err_t err, char *text);
+ static void ngx_ssl_clear_error(ngx_log_t *log);
+ 
++static ngx_int_t ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_str_t *cert);
++static ngx_int_t ngx_ssl_private_key(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_str_t *key, ngx_array_t *passwords);
+ static ngx_int_t ngx_ssl_session_id_context(ngx_ssl_t *ssl,
+     ngx_str_t *sess_ctx);
+ ngx_int_t ngx_ssl_session_cache_init(ngx_shm_zone_t *shm_zone, void *data);
+@@ -338,14 +342,39 @@ ngx_ssl_get_next_server_certificate(ngx_ssl_t *ssl)
+ 
+ 
+ ngx_int_t
+-ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+-    ngx_str_t *key, ngx_array_t *passwords)
++ngx_ssl_certificates(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_array_t *certs,
++    ngx_array_t *keys, ngx_array_t *passwords)
++{
++    ngx_uint_t  i, j;
++    ngx_str_t  *cert;
++    ngx_str_t  *key;
++
++    /* Load server certificates */
++    cert = certs->elts;
++    for (i = 0; i < certs->nelts; i++, cert++) {
++        if (ngx_ssl_server_certificate(cf, ssl, cert) != NGX_OK) {
++            return NGX_ERROR;
++        }
++    }
++
++    /* Load private keys */
++    key = keys->elts;
++    for (j = 0; j < keys->nelts; j++, key++) {
++        if (ngx_ssl_private_key(cf, ssl, key, passwords) != NGX_OK) {
++            return NGX_ERROR;
++        }
++    }
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t
++ngx_ssl_server_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert)
+ {
+     BIO         *bio;
+     X509        *x509;
+     u_long       n;
+-    ngx_str_t   *pwd;
+-    ngx_uint_t   tries;
+ 
+     if (ngx_conf_full_name(cf->cycle, cert, 1) != NGX_OK) {
+         return NGX_ERROR;
+@@ -441,6 +470,17 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+ 
+     BIO_free(bio);
+ 
++    return NGX_OK;
++}
++
++
++static ngx_int_t
++ngx_ssl_private_key(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *key,
++    ngx_array_t *passwords)
++{
++    ngx_str_t   *pwd;
++    ngx_uint_t   tries;
++
+     if (ngx_strncmp(key->data, "engine:", sizeof("engine:") - 1) == 0) {
+ 
+ #ifndef OPENSSL_NO_ENGINE
+@@ -2205,18 +2245,24 @@ ngx_ssl_session_id_context(ngx_ssl_t *ssl, ngx_str_t *sess_ctx)
+ 
+     cert = ngx_ssl_get_server_certificate(ssl);
+ 
+-    if (X509_digest(cert, EVP_sha1(), buf, &len) == 0) {
+-        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "X509_digest() failed");
+-        goto failed;
+-    }
++    while (cert) {
+ 
+-    if (EVP_DigestUpdate(&md, buf, len) == 0) {
+-        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "EVP_DigestUpdate() failed");
+-        goto failed;
++        if (X509_digest(cert, EVP_sha1(), buf, &len) == 0) {
++            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                          "X509_digest() failed");
++            goto failed;
++        }
++
++        if (EVP_DigestUpdate(&md, buf, len) == 0) {
++            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                          "EVP_DigestUpdate() failed");
++            goto failed;
++        }
++
++        cert = ngx_ssl_get_next_server_certificate(ssl);
+     }
+ 
++
+     list = SSL_CTX_get_client_CA_list(ssl->ctx);
+ 
+     if (list != NULL) {
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index 21e40ec..96517af 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -122,8 +122,8 @@ typedef struct {
+ 
+ ngx_int_t ngx_ssl_init(ngx_log_t *log);
+ ngx_int_t ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data);
+-ngx_int_t ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *cert, ngx_str_t *key, ngx_array_t *passwords);
++ngx_int_t ngx_ssl_certificates(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_array_t *certs, ngx_array_t *keys, ngx_array_t *passwords);
+ ngx_int_t ngx_ssl_client_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *cert, ngx_int_t depth);
+ ngx_int_t ngx_ssl_trusted_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
