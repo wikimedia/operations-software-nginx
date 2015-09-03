@@ -1,3 +1,9 @@
+nginx (1.9.4-1+wmf1) jessie-wikimedia; urgency=medium
+
+  * multicert + libssl work moved forward from 1.9.3-1+wmf2
+
+ -- Brandon Black <bblack@wikimedia.org>  Thu, 03 Sep 2015 15:51:46 +0000
+
 nginx (1.9.4-1) unstable; urgency=medium
 
   [ Christos Trochalakis]
