@@ -1,3 +1,12 @@
+nginx (1.9.4-1+wmf2) jessie-wikimedia; urgency=medium
+
+  * Backport upstream fix 062c189fee20c18fae5ac3716a7379143d64150e which
+    deals with changes in OpenSSL's SSL_shutdown() function during SSL
+    handshakes introduced in 1.0.2f (causing false positive critical errors)
+    Bug: T126616
+
+ -- Moritz Muehlenhoff <moritz@wikimedia.org>  Mon, 22 Feb 2016 14:12:37 +0000
+
 nginx (1.9.4-1+wmf1) jessie-wikimedia; urgency=medium
 
   * multicert + libssl work moved forward from 1.9.3-1+wmf2
