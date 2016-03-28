@@ -1,0 +1,379 @@
+----------- Original nginx-devel post --------------------------------------
+# HG changeset patch
+# User Filipe da Silva <fdasilva at ingima.com>
+# Date 1430147821 -7200
+#      Mon Apr 27 17:17:01 2015 +0200
+# Node ID caabe5c77b51274237d7c49fffb864a27ca0a25f
+# Parent  0ac2a8668f852b604d46ff858199650bd3003fdb
+OCSP Stapling: attach one stapling_t context per server certificate.
+
+Prepare for multiple server certificate support.
+Split common stapling settings from per-certificate settings.
+Keep common stapling settings attached to initial SSL server
+context, as before.
+
+Know limit: the staple file must contain a response with as much CERTID as
+server certificate. This means that one OCSP request must be made about
+all the certificates at once.
+
+Compatible with 'stable-1.8'
+------- End original nginx-devel post --------------------------------------
+
+WMF notes: This one didn't apply completely cleanly, so the patch below
+differs in non-trivial ways from the original mailing list patch.  The issues
+were related to the recent staple->valid changes in 1.9.
+
+In the interest of keeping this diff closer to the original from the mailing
+list it's based on, I removed 1.9.3's setting of staple->valid to
+NGX_MAX_TIME_T_VALUE for the ssl_stapling_file case, and in the _status
+callback I moved the "staple->valid >= ngx_time()" check to only apply to
+the non-ssl_stapling_file case.
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 9ff3545..81b1848 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -106,6 +106,7 @@ int  ngx_ssl_session_cache_index;
+ int  ngx_ssl_session_ticket_keys_index;
+ int  ngx_ssl_certificate_index;
+ int  ngx_ssl_stapling_index;
++int  ngx_ssl_cert_stapling_index;
+ 
+ 
+ ngx_int_t
+@@ -197,6 +198,14 @@ ngx_ssl_init(ngx_log_t *log)
+                       "SSL_CTX_get_ex_new_index() failed");
+         return NGX_ERROR;
+     }
++
++    ngx_ssl_cert_stapling_index = X509_get_ex_new_index(0, NULL, NULL, NULL,
++                                                        NULL);
++    if (ngx_ssl_cert_stapling_index == -1) {
++        ngx_ssl_error(NGX_LOG_ALERT, log, 0,
++                      "X509_get_ex_new_index() failed");
++        return NGX_ERROR;
++    }
+ #endif
+ 
+     return NGX_OK;
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index 6d5eae3..a4c9adf 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -229,6 +229,7 @@ extern int  ngx_ssl_server_conf_index;
+ extern int  ngx_ssl_session_cache_index;
+ extern int  ngx_ssl_session_ticket_keys_index;
+ extern int  ngx_ssl_stapling_index;
++extern int  ngx_ssl_cert_stapling_index;
+ 
+ 
+ #endif /* _NGX_EVENT_OPENSSL_H_INCLUDED_ */
+diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
+index 1e21891..0798462 100644
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -14,13 +14,22 @@
+ #if (!defined OPENSSL_NO_OCSP && defined SSL_CTRL_SET_TLSEXT_STATUS_REQ_CB)
+ 
+ 
++/* OCSP stapling configuration per server */
+ typedef struct {
+-    ngx_str_t                    staple;
++    ngx_str_t                    staple_file;
+     ngx_msec_t                   timeout;
+ 
+     ngx_resolver_t              *resolver;
+     ngx_msec_t                   resolver_timeout;
+ 
++    unsigned                     verify:1;
++} ngx_ssl_staple_conf_t;
++
++
++/* OCSP stapling context per certificate */
++typedef struct {
++    ngx_str_t                    staple;    /* OCSP response from responder */
++
+     ngx_addr_t                  *addrs;
+     ngx_str_t                    host;
+     ngx_str_t                    uri;
+@@ -34,7 +43,6 @@ typedef struct {
+     time_t                       valid;
+     time_t                       refresh;
+ 
+-    unsigned                     verify:1;
+     unsigned                     loading:1;
+ } ngx_ssl_stapling_t;
+ 
+@@ -54,6 +62,7 @@ struct ngx_ssl_ocsp_ctx_s {
+ 
+     ngx_resolver_t              *resolver;
+     ngx_msec_t                   resolver_timeout;
++    unsigned                     verify:1;
+ 
+     ngx_msec_t                   timeout;
+ 
+@@ -84,14 +93,15 @@ struct ngx_ssl_ocsp_ctx_s {
+ 
+ 
+ static ngx_int_t ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *file);
++    ngx_str_t *file, ngx_ssl_staple_conf_t *conf);
+ static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl);
+ static ngx_int_t ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *responder);
+ 
+ static int ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn,
+     void *data);
+-static void ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple);
++static void ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple,
++    ngx_ssl_staple_conf_t *conf);
+ static void ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx);
+ 
+ static time_t ngx_ssl_stapling_time(ASN1_GENERALIZEDTIME *asn1time);
+@@ -122,23 +132,14 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+     ngx_str_t *responder, ngx_uint_t verify)
+ {
+     ngx_int_t                  rc;
+-    ngx_pool_cleanup_t        *cln;
+-    ngx_ssl_stapling_t        *staple;
++    ngx_ssl_staple_conf_t     *conf;
+ 
+-    staple = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_stapling_t));
+-    if (staple == NULL) {
++    conf = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_staple_conf_t));
++    if (conf == NULL) {
+         return NGX_ERROR;
+     }
+ 
+-    cln = ngx_pool_cleanup_add(cf->pool, 0);
+-    if (cln == NULL) {
+-        return NGX_ERROR;
+-    }
+-
+-    cln->handler = ngx_ssl_stapling_cleanup;
+-    cln->data = staple;
+-
+-    if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_stapling_index, staple)
++    if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_stapling_index, conf)
+         == 0)
+     {
+         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+@@ -146,14 +147,13 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+         return NGX_ERROR;
+     }
+ 
+-    staple->ssl_ctx = ssl->ctx;
+-    staple->timeout = 60000;
+-    staple->verify = verify;
++    conf->timeout = 60000;
++    conf->verify = verify;
+ 
+     if (file->len) {
+         /* use OCSP response from the file */
+ 
+-        if (ngx_ssl_stapling_file(cf, ssl, file) != NGX_OK) {
++        if (ngx_ssl_stapling_file(cf, ssl, file, conf) != NGX_OK) {
+             return NGX_ERROR;
+         }
+ 
+@@ -183,22 +183,20 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+ done:
+ 
+     SSL_CTX_set_tlsext_status_cb(ssl->ctx, ngx_ssl_certificate_status_callback);
+-    SSL_CTX_set_tlsext_status_arg(ssl->ctx, staple);
++    SSL_CTX_set_tlsext_status_arg(ssl->ctx, conf);
+ 
+     return NGX_OK;
+ }
+ 
+ 
+ static ngx_int_t
+-ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file)
++ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
++    ngx_ssl_staple_conf_t *conf)
+ {
+     BIO                 *bio;
+     int                  len;
+     u_char              *p, *buf;
+     OCSP_RESPONSE       *response;
+-    ngx_ssl_stapling_t  *staple;
+-
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+ 
+     if (ngx_conf_full_name(cf->cycle, file, 1) != NGX_OK) {
+         return NGX_ERROR;
+@@ -226,7 +224,8 @@ ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file)
+         goto failed;
+     }
+ 
+-    buf = ngx_alloc(len, ssl->log);
++    /* File content buffer allocated from pool to avoid additional cleanup */
++    buf = ngx_palloc(cf->pool, len);
+     if (buf == NULL) {
+         goto failed;
+     }
+@@ -243,9 +242,8 @@ ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file)
+     OCSP_RESPONSE_free(response);
+     BIO_free(bio);
+ 
+-    staple->staple.data = buf;
+-    staple->staple.len = len;
+-    staple->valid = NGX_MAX_TIME_T_VALUE;
++    conf->staple_file.data = buf;
++    conf->staple_file.len = len;
+ 
+     return NGX_OK;
+ 
+@@ -267,10 +265,33 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+     X509_STORE_CTX      *store_ctx;
+     STACK_OF(X509)      *chain;
+     ngx_ssl_stapling_t  *staple;
++    ngx_pool_cleanup_t  *cln;
+ 
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+     cert = ngx_ssl_get_server_certificate(ssl->ctx);
+ 
++    staple = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_stapling_t));
++    if (staple == NULL) {
++        return NGX_ERROR;
++    }
++
++    cln = ngx_pool_cleanup_add(cf->pool, 0);
++    if (cln == NULL) {
++        return NGX_ERROR;
++    }
++
++    cln->handler = ngx_ssl_stapling_cleanup;
++    cln->data = staple;
++
++    if (X509_set_ex_data(cert, ngx_ssl_cert_stapling_index, staple)
++        == 0)
++    {
++        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                      "X509_set_ex_data() failed");
++        return NGX_ERROR;
++    }
++
++    staple->ssl_ctx = ssl->ctx;
++
+ #ifdef SSL_CTX_get0_chain_certs
+     SSL_CTX_get0_chain_certs(ssl->ctx, &chain);
+ #elif OPENSSL_VERSION_NUMBER >= 0x10001000L
+@@ -358,9 +379,11 @@ ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *responder)
+     ngx_url_t                  u;
+     char                      *s;
+     ngx_ssl_stapling_t        *staple;
++    X509                      *cert;
+     STACK_OF(OPENSSL_STRING)  *aia;
+ 
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
++    cert = ngx_ssl_get_server_certificate(ssl);
++    staple = X509_get_ex_data(cert, ngx_ssl_cert_stapling_index);
+ 
+     if (responder->len == 0) {
+ 
+@@ -445,7 +468,7 @@ ngx_int_t
+ ngx_ssl_stapling_resolver(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_resolver_t *resolver, ngx_msec_t resolver_timeout)
+ {
+-    ngx_ssl_stapling_t  *staple;
++    ngx_ssl_staple_conf_t    *staple;
+ 
+     staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+ 
+@@ -459,45 +482,58 @@ ngx_ssl_stapling_resolver(ngx_conf_t *cf, ngx_ssl_t *ssl,
+ static int
+ ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn, void *data)
+ {
+-    int                  rc;
+-    u_char              *p;
+-    ngx_connection_t    *c;
+-    ngx_ssl_stapling_t  *staple;
++    int                     rc;
++    u_char                 *p;
++    ngx_str_t               resp;
++    ngx_connection_t       *c;
++    ngx_ssl_staple_conf_t  *conf;
++    ngx_ssl_stapling_t     *staple;
++    X509                   *cert;
+ 
+     c = ngx_ssl_get_connection(ssl_conn);
++    cert = SSL_get_certificate(ssl_conn);
+ 
+     ngx_log_debug0(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                    "SSL certificate status callback");
+ 
+-    staple = data;
++    staple = X509_get_ex_data(cert, ngx_ssl_cert_stapling_index);
++    conf = data;
+     rc = SSL_TLSEXT_ERR_NOACK;
++    resp.len = 0;
+ 
+-    if (staple->staple.len
+-        && staple->valid >= ngx_time())
+-    {
+-        /* we have to copy ocsp response as OpenSSL will free it by itself */
++    if (conf->staple_file.len) {
++        resp = conf->staple_file;
++    }
++    else if (staple && staple->staple.len && staple->valid >= ngx_time()) {
++        resp = staple->staple;
++    }
++
++    if (resp.len) {
++        /* We have to copy ocsp response as OpenSSL will free it by itself */
++        p = OPENSSL_malloc(resp.len);
+ 
+-        p = OPENSSL_malloc(staple->staple.len);
+         if (p == NULL) {
+             ngx_ssl_error(NGX_LOG_ALERT, c->log, 0, "OPENSSL_malloc() failed");
+             return SSL_TLSEXT_ERR_NOACK;
+         }
+ 
+-        ngx_memcpy(p, staple->staple.data, staple->staple.len);
++        ngx_memcpy(p, resp.data, resp.len);
+ 
+-        SSL_set_tlsext_status_ocsp_resp(ssl_conn, p, staple->staple.len);
++        SSL_set_tlsext_status_ocsp_resp(ssl_conn, p, resp.len);
+ 
+         rc = SSL_TLSEXT_ERR_OK;
+     }
+ 
+-    ngx_ssl_stapling_update(staple);
++    if (staple) {
++        ngx_ssl_stapling_update(staple, conf);
++    }
+ 
+     return rc;
+ }
+ 
+ 
+ static void
+-ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple)
++ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple, ngx_ssl_staple_conf_t *conf)
+ {
+     ngx_ssl_ocsp_ctx_t  *ctx;
+ 
+@@ -521,10 +557,10 @@ ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple)
+     ctx->host = staple->host;
+     ctx->uri = staple->uri;
+     ctx->port = staple->port;
+-    ctx->timeout = staple->timeout;
++    ctx->timeout = conf->timeout;
+ 
+-    ctx->resolver = staple->resolver;
+-    ctx->resolver_timeout = staple->resolver_timeout;
++    ctx->resolver = conf->resolver;
++    ctx->resolver_timeout = conf->resolver_timeout;
+ 
+     ctx->handler = ngx_ssl_stapling_ocsp_handler;
+     ctx->data = staple;
+@@ -608,7 +644,7 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+     chain = staple->ssl_ctx->extra_certs;
+ #endif
+ 
+-    flags = staple->verify ? OCSP_TRUSTOTHER : OCSP_NOVERIFY;
++    flags = ctx->verify ? OCSP_TRUSTOTHER : OCSP_NOVERIFY;
+ 
+ #if OPENSSL_VERSION_NUMBER < 0x10000000L
+     /*

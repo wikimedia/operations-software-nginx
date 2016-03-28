@@ -1,2 +1,12 @@
 perl-use-dpkg-buildflags.patch
 0002-Make-sure-signature-stays-the-same-in-all-nginx-buil.patch
+# 1001-1005 is forward ports of multi-cert patches from Filipe da Silva
+# circa 2015-04-27, onto nginx-1.9.14, from the 5 posts starting here:
+# http://mailman.nginx.org/pipermail/nginx-devel/2015-April/006863.html
+1001-openssl102.patch
+1002-stapling-per-cert.patch
+1003-stapling-multi-cert.patch
+1004-cert-list.patch
+1005-multicert-modules.patch
+# 1006 is a local cargo-cult of 1005's changes into the newer stream modules
+1006-multicert-stream-modules.patch

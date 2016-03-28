@@ -1,0 +1,251 @@
+This is basically a cargo-culting of the changes in
+1005-multicert-modules.patch that makes very very similar changes to the
+stream_proxy and stream_ssl modules, which are newer than the nginx 1.8
+originally targeted by Filipe's patch set. --bblack
+
+diff --git a/src/stream/ngx_stream_proxy_module.c b/src/stream/ngx_stream_proxy_module.c
+index 6c535fd..c2b7452 100644
+--- a/src/stream/ngx_stream_proxy_module.c
++++ b/src/stream/ngx_stream_proxy_module.c
+@@ -35,8 +35,8 @@ typedef struct {
+     ngx_uint_t                       ssl_verify_depth;
+     ngx_str_t                        ssl_trusted_certificate;
+     ngx_str_t                        ssl_crl;
+-    ngx_str_t                        ssl_certificate;
+-    ngx_str_t                        ssl_certificate_key;
++    ngx_array_t                     *ssl_certificates;
++    ngx_array_t                     *ssl_certificate_keys;
+     ngx_array_t                     *ssl_passwords;
+ 
+     ngx_ssl_t                       *ssl;
+@@ -277,16 +277,16 @@ static ngx_command_t  ngx_stream_proxy_commands[] = {
+ 
+     { ngx_string("proxy_ssl_certificate"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+-      offsetof(ngx_stream_proxy_srv_conf_t, ssl_certificate),
++      offsetof(ngx_stream_proxy_srv_conf_t, ssl_certificates),
+       NULL },
+ 
+     { ngx_string("proxy_ssl_certificate_key"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+-      offsetof(ngx_stream_proxy_srv_conf_t, ssl_certificate_key),
++      offsetof(ngx_stream_proxy_srv_conf_t, ssl_certificate_keys),
+       NULL },
+ 
+     { ngx_string("proxy_ssl_password_file"),
+@@ -1405,8 +1405,6 @@ ngx_stream_proxy_create_srv_conf(ngx_conf_t *cf)
+      *     conf->ssl_name = { 0, NULL };
+      *     conf->ssl_trusted_certificate = { 0, NULL };
+      *     conf->ssl_crl = { 0, NULL };
+-     *     conf->ssl_certificate = { 0, NULL };
+-     *     conf->ssl_certificate_key = { 0, NULL };
+      *
+      *     conf->ssl = NULL;
+      *     conf->upstream = NULL;
+@@ -1430,6 +1428,8 @@ ngx_stream_proxy_create_srv_conf(ngx_conf_t *cf)
+     conf->ssl_server_name = NGX_CONF_UNSET;
+     conf->ssl_verify = NGX_CONF_UNSET;
+     conf->ssl_verify_depth = NGX_CONF_UNSET_UINT;
++    conf->ssl_certificates = NGX_CONF_UNSET_PTR;
++    conf->ssl_certificate_keys = NGX_CONF_UNSET_PTR;
+     conf->ssl_passwords = NGX_CONF_UNSET_PTR;
+ #endif
+ 
+@@ -1500,11 +1500,11 @@ ngx_stream_proxy_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     ngx_conf_merge_str_value(conf->ssl_crl, prev->ssl_crl, "");
+ 
+-    ngx_conf_merge_str_value(conf->ssl_certificate,
+-                              prev->ssl_certificate, "");
++    ngx_conf_merge_ptr_value(conf->ssl_certificates,
++                              prev->ssl_certificates, NULL);
+ 
+-    ngx_conf_merge_str_value(conf->ssl_certificate_key,
+-                              prev->ssl_certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->ssl_certificate_keys,
++                              prev->ssl_certificate_keys, NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->ssl_passwords, prev->ssl_passwords, NULL);
+ 
+@@ -1524,6 +1524,7 @@ static ngx_int_t
+ ngx_stream_proxy_set_ssl(ngx_conf_t *cf, ngx_stream_proxy_srv_conf_t *pscf)
+ {
+     ngx_pool_cleanup_t  *cln;
++    ngx_str_t *oddkey;
+ 
+     pscf->ssl = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_t));
+     if (pscf->ssl == NULL) {
+@@ -1544,17 +1545,41 @@ ngx_stream_proxy_set_ssl(ngx_conf_t *cf, ngx_stream_proxy_srv_conf_t *pscf)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = pscf->ssl;
+ 
+-    if (pscf->ssl_certificate.len) {
++    if (pscf->ssl_certificates && pscf->ssl_certificates->nelts > 0) {
++
++        if (!pscf->ssl_certificate_keys
++            || pscf->ssl_certificate_keys->nelts
++                < pscf->ssl_certificates->nelts)
++        {
++
++            oddkey = pscf->ssl_certificates->elts;
+ 
+-        if (pscf->ssl_certificate_key.len == 0) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"proxy_ssl_certificate_key\" is defined "
+-                          "for certificate \"%V\"", &pscf->ssl_certificate);
++                          "for ssl certificate \"%V\"",
++                          oddkey[(pscf->ssl_certificate_keys)
++                                 ? pscf->ssl_certificate_keys->nelts
++                                 : 0]);
+             return NGX_ERROR;
+         }
+ 
+-        if (ngx_ssl_certificate(cf, pscf->ssl, &pscf->ssl_certificate,
+-                                &pscf->ssl_certificate_key, pscf->ssl_passwords)
++#ifndef SSL_CTX_add0_chain_cert
++        if (pscf->ssl_certificates->nelts > 1) {
++            /*
++             *   no multiple certificates support for OpenSSL < 1.0.2,
++             *   so we need to alarm user
++             */
++            ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                         "Multiple certificates configured "
++                         "in \"proxy_ssl_certificates\", "
++                         "but OpenSSL version < 1.0.2 used");
++            return NGX_ERROR;
++        }
++#endif
++
++        if (ngx_ssl_certificates(cf, pscf->ssl, pscf->ssl_certificates,
++                                 pscf->ssl_certificate_keys,
++                                 pscf->ssl_passwords)
+             != NGX_OK)
+         {
+             return NGX_ERROR;
+diff --git a/src/stream/ngx_stream_ssl_module.c b/src/stream/ngx_stream_ssl_module.c
+index e12da1b..360db17 100644
+--- a/src/stream/ngx_stream_ssl_module.c
++++ b/src/stream/ngx_stream_ssl_module.c
+@@ -45,16 +45,16 @@ static ngx_command_t  ngx_stream_ssl_commands[] = {
+ 
+     { ngx_string("ssl_certificate"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+-      offsetof(ngx_stream_ssl_conf_t, certificate),
++      offsetof(ngx_stream_ssl_conf_t, certificates),
+       NULL },
+ 
+     { ngx_string("ssl_certificate_key"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+-      offsetof(ngx_stream_ssl_conf_t, certificate_key),
++      offsetof(ngx_stream_ssl_conf_t, certificate_keys),
+       NULL },
+ 
+     { ngx_string("ssl_password_file"),
+@@ -175,8 +175,6 @@ ngx_stream_ssl_create_conf(ngx_conf_t *cf)
+      * set by ngx_pcalloc():
+      *
+      *     scf->protocols = 0;
+-     *     scf->certificate = { 0, NULL };
+-     *     scf->certificate_key = { 0, NULL };
+      *     scf->dhparam = { 0, NULL };
+      *     scf->ecdh_curve = { 0, NULL };
+      *     scf->ciphers = { 0, NULL };
+@@ -184,6 +182,8 @@ ngx_stream_ssl_create_conf(ngx_conf_t *cf)
+      */
+ 
+     scf->handshake_timeout = NGX_CONF_UNSET_MSEC;
++    scf->certificates = NGX_CONF_UNSET_PTR;
++    scf->certificate_keys = NGX_CONF_UNSET_PTR;
+     scf->passwords = NGX_CONF_UNSET_PTR;
+     scf->prefer_server_ciphers = NGX_CONF_UNSET;
+     scf->builtin_session_cache = NGX_CONF_UNSET;
+@@ -216,8 +216,9 @@ ngx_stream_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+                          (NGX_CONF_BITMASK_SET|NGX_SSL_TLSv1
+                           |NGX_SSL_TLSv1_1|NGX_SSL_TLSv1_2));
+ 
+-    ngx_conf_merge_str_value(conf->certificate, prev->certificate, "");
+-    ngx_conf_merge_str_value(conf->certificate_key, prev->certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->certificates, prev->certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->certificate_keys, prev->certificate_keys,
++                             NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->passwords, prev->passwords, NULL);
+ 
+@@ -231,17 +232,36 @@ ngx_stream_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     conf->ssl.log = cf->log;
+ 
+-    if (conf->certificate.len == 0) {
++    if (!conf->certificates || conf->certificates->nelts == 0) {
+         return NGX_CONF_OK;
+     }
+ 
+-    if (conf->certificate_key.len == 0) {
++    if (!conf->certificate_keys || conf->certificate_keys->nelts == 0) {
++        ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                      "no \"ssl_certificate_key\" is defined "
++                      "for certificate \"%V\"", &conf->certificates[0]);
++        return NGX_CONF_ERROR;
++    }
++    if (conf->certificate_keys->nelts < conf->certificates->nelts) {
+         ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                       "no \"ssl_certificate_key\" is defined "
+                       "for certificate \"%V\"",
+-                      &conf->certificate);
++                      &conf->certificates[conf->certificate_keys->nelts]);
++        return NGX_CONF_ERROR;
++    }
++
++#ifndef SSL_CTX_add0_chain_cert
++    if (conf->certificates->nelts > 1) {
++        /*
++         *   no multiple certificates support for OpenSSL < 1.0.2,
++         *   so we need to alarm user
++         */
++        ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                        "Multiple certificate configured in "
++                        "\"ssl_certificate\", but OpenSSL < 1.0.2 used");
+         return NGX_CONF_ERROR;
+     }
++#endif
+ 
+     if (ngx_ssl_create(&conf->ssl, conf->protocols, NULL) != NGX_OK) {
+         return NGX_CONF_ERROR;
+@@ -255,8 +275,8 @@ ngx_stream_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = &conf->ssl;
+ 
+-    if (ngx_ssl_certificate(cf, &conf->ssl, &conf->certificate,
+-                            &conf->certificate_key, conf->passwords)
++    if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
++                             conf->certificate_keys, conf->passwords)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+diff --git a/src/stream/ngx_stream_ssl_module.h b/src/stream/ngx_stream_ssl_module.h
+index 85e8b6e..331341f 100644
+--- a/src/stream/ngx_stream_ssl_module.h
++++ b/src/stream/ngx_stream_ssl_module.h
+@@ -27,8 +27,8 @@ typedef struct {
+ 
+     time_t           session_timeout;
+ 
+-    ngx_str_t        certificate;
+-    ngx_str_t        certificate_key;
++    ngx_array_t     *certificates;
++    ngx_array_t     *certificate_keys;
+     ngx_str_t        dhparam;
+     ngx_str_t        ecdh_curve;
+ 
