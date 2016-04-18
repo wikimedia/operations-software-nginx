@@ -1,3 +1,11 @@
+nginx (1.10.0-1+wmf1) jessie-wikimedia; urgency=medium
+
+  * Based on unstable debian 1.10.0-1
+  * multicert + libssl work moved forward to 1.10.0
+  * No dbgsym packages for new dyn modules (jessie build workaround)
+
+ -- Brandon Black <bblack@wikimedia.org>  Mon, 02 May 2016 19:39:12 +0000
+
 nginx (1.10.0-1) unstable; urgency=medium
 
   [ Christos Trochalakis ]
