@@ -1,0 +1,4446 @@
+commit e8bb60aa073221e82f0d6c92823fe46ebb849dbd
+Author: Christos Trochalakis <yatiohi@ideopolis.gr>
+Date:   Wed May 25 10:50:08 2016 +0300
+
+    Imported Upstream version 1.11.0
+
+diff --git a/CHANGES b/CHANGES
+index 408f952..93d3f4d 100644
+--- a/CHANGES
++++ b/CHANGES
+@@ -1,7 +1,49 @@
+ 
+-Changes with nginx 1.10.0                                        26 Apr 2016
++Changes with nginx 1.11.0                                        24 May 2016
+ 
+-    *) 1.10.x stable branch.
++    *) Feature: the "transparent" parameter of the "proxy_bind",
++       "fastcgi_bind", "memcached_bind", "scgi_bind", and "uwsgi_bind"
++       directives.
++
++    *) Feature: the $request_id variable.
++
++    *) Feature: the "map" directive supports combinations of multiple
++       variables as resulting values.
++
++    *) Feature: now nginx checks if EPOLLRDHUP events are supported by
++       kernel, and optimizes connection handling accordingly if the "epoll"
++       method is used.
++
++    *) Feature: the "ssl_certificate" and "ssl_certificate_key" directives
++       can be specified multiple times to load certificates of different
++       types (for example, RSA and ECDSA).
++
++    *) Feature: the "ssl_ecdh_curve" directive now allows specifying a list
++       of curves when using OpenSSL 1.0.2 or newer; by default a list built
++       into OpenSSL is used.
++
++    *) Change: to use DHE ciphers it is now required to specify parameters
++       using the "ssl_dhparam" directive.
++
++    *) Feature: the $proxy_protocol_port variable.
++
++    *) Feature: the $realip_remote_port variable in the
++       ngx_http_realip_module.
++
++    *) Feature: the ngx_http_realip_module is now able to set the client
++       port in addition to the address.
++
++    *) Change: the "421 Misdirected Request" response now used when
++       rejecting requests to a virtual server different from one negotiated
++       during an SSL handshake; this improves interoperability with some
++       HTTP/2 clients when using client certificates.
++
++    *) Change: HTTP/2 clients can now start sending request body
++       immediately; the "http2_body_preread_size" directive controls size of
++       the buffer used before nginx will start reading client request body.
++
++    *) Bugfix: cached error responses were not updated when using the
++       "proxy_cache_bypass" directive.
+ 
+ 
+ Changes with nginx 1.9.15                                        19 Apr 2016
+diff --git a/CHANGES.ru b/CHANGES.ru
+index 4e6002e..f142a90 100644
+--- a/CHANGES.ru
++++ b/CHANGES.ru
+@@ -1,7 +1,48 @@
+ 
+-Изменения в nginx 1.10.0                                          26.04.2016
++Изменения в nginx 1.11.0                                          24.05.2016
+ 
+-    *) Стабильная ветка 1.10.x.
++    *) Добавление: параметр transparent директив proxy_bind, fastcgi_bind,
++       memcached_bind, scgi_bind и uwsgi_bind.
++
++    *) Добавление: переменная $request_id.
++
++    *) Добавление: директива map поддерживает комбинации нескольких
++       переменных в качестве результирующих значений.
++
++    *) Добавление: теперь при использовании метода epoll nginx проверяет,
++       поддерживает ли ядро события EPOLLRDHUP, и соответственно
++       оптимизирует обработку соединений.
++
++    *) Добавление: директивы ssl_certificate и ssl_certificate_key теперь
++       можно указывать несколько раз для загрузки сертификатов разных типов
++       (например, RSA и ECDSA).
++
++    *) Добавление: при использовании OpenSSL 1.0.2 и новее с помощью
++       директивы ssl_ecdh_curve теперь можно задать список кривых; по
++       умолчанию используется встроенный в OpenSSL список кривых.
++
++    *) Изменение: для использования DHE-шифров теперь надо явно задавать
++       файл параметров с помощью директивы ssl_dhparam.
++
++    *) Добавление: переменная $proxy_protocol_port.
++
++    *) Добавление: переменная $realip_remote_port в модуле
++       ngx_http_realip_module.
++
++    *) Добавление: модуль ngx_http_realip_module теперь позволяет
++       устанавливать не только адрес, но и порт клиента.
++
++    *) Изменение: при попытке запросить виртуальный сервер, отличающийся от
++       согласованного в процессе SSL handshake, теперь возвращается ответ
++       "421 Misdirected Request"; это улучшает совместимость с некоторыми
++       HTTP/2-клиентами в случае использования клиентских сертификатов.
++
++    *) Изменение: HTTP/2-клиенты теперь могут сразу присылать тело запроса;
++       директива http2_body_preread_size позволяет указать размер буфера,
++       который будет использоваться до того, как nginx начнёт читать тело.
++
++    *) Исправление: при использовании директивы proxy_cache_bypass не
++       обновлялись закэшированные ошибочные ответы.
+ 
+ 
+ Изменения в nginx 1.9.15                                          19.04.2016
+diff --git a/auto/unix b/auto/unix
+index 8c0e813..e6396ef 100755
+--- a/auto/unix
++++ b/auto/unix
+@@ -329,6 +329,44 @@ ngx_feature_test="setsockopt(0, SOL_SOCKET, SO_ACCEPTFILTER, NULL, 0)"
+ . auto/feature
+ 
+ 
++# NetBSD bind to any address for transparent proxying
++
++ngx_feature="SO_BINDANY"
++ngx_feature_name="NGX_HAVE_TRANSPARENT_PROXY"
++ngx_feature_run=no
++ngx_feature_incs="#include <sys/socket.h>"
++ngx_feature_path=
++ngx_feature_libs=
++ngx_feature_test="setsockopt(0, SOL_SOCKET, SO_BINDANY, NULL, 0)"
++. auto/feature
++
++
++# Linux transparent proxying
++
++ngx_feature="IP_TRANSPARENT"
++ngx_feature_name="NGX_HAVE_TRANSPARENT_PROXY"
++ngx_feature_run=no
++ngx_feature_incs="#include <sys/socket.h>
++                  #include <netinet/in.h>"
++ngx_feature_path=
++ngx_feature_libs=
++ngx_feature_test="setsockopt(0, IPPROTO_IP, IP_TRANSPARENT, NULL, 0)"
++. auto/feature
++
++
++# FreeBSD bind to any address for transparent proxying
++
++ngx_feature="IP_BINDANY"
++ngx_feature_name="NGX_HAVE_TRANSPARENT_PROXY"
++ngx_feature_run=no
++ngx_feature_incs="#include <sys/socket.h>
++                  #include <netinet/in.h>"
++ngx_feature_path=
++ngx_feature_libs=
++ngx_feature_test="setsockopt(0, IPPROTO_IP, IP_BINDANY, NULL, 0)"
++. auto/feature
++
++
+ # BSD way to get IPv4 datagram destination address
+ 
+ ngx_feature="IP_RECVDSTADDR"
+diff --git a/src/core/nginx.h b/src/core/nginx.h
+index fe78745..2e7cb4c 100644
+--- a/src/core/nginx.h
++++ b/src/core/nginx.h
+@@ -9,8 +9,8 @@
+ #define _NGINX_H_INCLUDED_
+ 
+ 
+-#define nginx_version      1010000
+-#define NGINX_VERSION      "1.10.0"
++#define nginx_version      1011000
++#define NGINX_VERSION      "1.11.0"
+ #define NGINX_VER          "nginx/" NGINX_VERSION
+ 
+ #ifdef NGX_BUILD
+diff --git a/src/core/ngx_conf_file.h b/src/core/ngx_conf_file.h
+index 9ccee36..213611f 100644
+--- a/src/core/ngx_conf_file.h
++++ b/src/core/ngx_conf_file.h
+@@ -45,7 +45,6 @@
+ #define NGX_CONF_ANY         0x00000400
+ #define NGX_CONF_1MORE       0x00000800
+ #define NGX_CONF_2MORE       0x00001000
+-#define NGX_CONF_MULTI       0x00000000  /* compatibility */
+ 
+ #define NGX_DIRECT_CONF      0x00010000
+ 
+diff --git a/src/core/ngx_connection.c b/src/core/ngx_connection.c
+index 5a53bac..16ba630 100644
+--- a/src/core/ngx_connection.c
++++ b/src/core/ngx_connection.c
+@@ -17,7 +17,8 @@ static void ngx_drain_connections(void);
+ 
+ 
+ ngx_listening_t *
+-ngx_create_listening(ngx_conf_t *cf, void *sockaddr, socklen_t socklen)
++ngx_create_listening(ngx_conf_t *cf, struct sockaddr *sockaddr,
++    socklen_t socklen)
+ {
+     size_t            len;
+     ngx_listening_t  *ls;
+@@ -150,12 +151,12 @@ ngx_set_inherited_sockets(ngx_cycle_t *cycle)
+     ls = cycle->listening.elts;
+     for (i = 0; i < cycle->listening.nelts; i++) {
+ 
+-        ls[i].sockaddr = ngx_palloc(cycle->pool, NGX_SOCKADDRLEN);
++        ls[i].sockaddr = ngx_palloc(cycle->pool, sizeof(ngx_sockaddr_t));
+         if (ls[i].sockaddr == NULL) {
+             return NGX_ERROR;
+         }
+ 
+-        ls[i].socklen = NGX_SOCKADDRLEN;
++        ls[i].socklen = sizeof(ngx_sockaddr_t);
+         if (getsockname(ls[i].fd, ls[i].sockaddr, &ls[i].socklen) == -1) {
+             ngx_log_error(NGX_LOG_CRIT, cycle->log, ngx_socket_errno,
+                           "getsockname() of the inherited "
+@@ -1277,7 +1278,7 @@ ngx_connection_local_sockaddr(ngx_connection_t *c, ngx_str_t *s,
+ {
+     socklen_t             len;
+     ngx_uint_t            addr;
+-    u_char                sa[NGX_SOCKADDRLEN];
++    ngx_sockaddr_t        sa;
+     struct sockaddr_in   *sin;
+ #if (NGX_HAVE_INET6)
+     ngx_uint_t            i;
+@@ -1315,9 +1316,9 @@ ngx_connection_local_sockaddr(ngx_connection_t *c, ngx_str_t *s,
+ 
+     if (addr == 0) {
+ 
+-        len = NGX_SOCKADDRLEN;
++        len = sizeof(ngx_sockaddr_t);
+ 
+-        if (getsockname(c->fd, (struct sockaddr *) &sa, &len) == -1) {
++        if (getsockname(c->fd, &sa.sockaddr, &len) == -1) {
+             ngx_connection_error(c, ngx_socket_errno, "getsockname() failed");
+             return NGX_ERROR;
+         }
+diff --git a/src/core/ngx_connection.h b/src/core/ngx_connection.h
+index b0d162a..b11e92b 100644
+--- a/src/core/ngx_connection.h
++++ b/src/core/ngx_connection.h
+@@ -149,6 +149,7 @@ struct ngx_connection_s {
+     ngx_str_t           addr_text;
+ 
+     ngx_str_t           proxy_protocol_addr;
++    in_port_t           proxy_protocol_port;
+ 
+ #if (NGX_SSL)
+     ngx_ssl_connection_t  *ssl;
+@@ -169,7 +170,6 @@ struct ngx_connection_s {
+ 
+     unsigned            log_error:3;     /* ngx_connection_log_error_e */
+ 
+-    unsigned            unexpected_eof:1;
+     unsigned            timedout:1;
+     unsigned            error:1;
+     unsigned            destroyed:1;
+@@ -211,7 +211,7 @@ struct ngx_connection_s {
+     }
+ 
+ 
+-ngx_listening_t *ngx_create_listening(ngx_conf_t *cf, void *sockaddr,
++ngx_listening_t *ngx_create_listening(ngx_conf_t *cf, struct sockaddr *sockaddr,
+     socklen_t socklen);
+ ngx_int_t ngx_clone_listening(ngx_conf_t *cf, ngx_listening_t *ls);
+ ngx_int_t ngx_set_inherited_sockets(ngx_cycle_t *cycle);
+diff --git a/src/core/ngx_inet.c b/src/core/ngx_inet.c
+index 33b303d..873bf73 100644
+--- a/src/core/ngx_inet.c
++++ b/src/core/ngx_inet.c
+@@ -526,6 +526,85 @@ ngx_parse_addr(ngx_pool_t *pool, ngx_addr_t *addr, u_char *text, size_t len)
+ 
+ 
+ ngx_int_t
++ngx_parse_addr_port(ngx_pool_t *pool, ngx_addr_t *addr, u_char *text,
++    size_t len)
++{
++    u_char               *p, *last;
++    size_t                plen;
++    ngx_int_t             rc, port;
++    struct sockaddr_in   *sin;
++#if (NGX_HAVE_INET6)
++    struct sockaddr_in6  *sin6;
++#endif
++
++    rc = ngx_parse_addr(pool, addr, text, len);
++
++    if (rc != NGX_DECLINED) {
++        return rc;
++    }
++
++    last = text + len;
++
++#if (NGX_HAVE_INET6)
++    if (len && text[0] == '[') {
++
++        p = ngx_strlchr(text, last, ']');
++
++        if (p == NULL || p == last - 1 || *++p != ':') {
++            return NGX_DECLINED;
++        }
++
++        text++;
++        len -= 2;
++
++    } else
++#endif
++
++    {
++        p = ngx_strlchr(text, last, ':');
++
++        if (p == NULL) {
++            return NGX_DECLINED;
++        }
++    }
++
++    p++;
++    plen = last - p;
++
++    port = ngx_atoi(p, plen);
++
++    if (port < 1 || port > 65535) {
++        return NGX_DECLINED;
++    }
++
++    len -= plen + 1;
++
++    rc = ngx_parse_addr(pool, addr, text, len);
++
++    if (rc != NGX_OK) {
++        return rc;
++    }
++
++    switch (addr->sockaddr->sa_family) {
++
++#if (NGX_HAVE_INET6)
++    case AF_INET6:
++        sin6 = (struct sockaddr_in6 *) addr->sockaddr;
++        sin6->sin6_port = htons((in_port_t) port);
++        break;
++#endif
++
++    default: /* AF_INET */
++        sin = (struct sockaddr_in *) addr->sockaddr;
++        sin->sin_port = htons((in_port_t) port);
++        break;
++    }
++
++    return NGX_OK;
++}
++
++
++ngx_int_t
+ ngx_parse_url(ngx_pool_t *pool, ngx_url_t *u)
+ {
+     u_char  *p;
+@@ -763,7 +842,7 @@ ngx_parse_inet_url(ngx_pool_t *pool, ngx_url_t *u)
+             return NGX_ERROR;
+         }
+ 
+-        ngx_memcpy(sin, u->sockaddr, sizeof(struct sockaddr_in));
++        ngx_memcpy(sin, &u->sockaddr, sizeof(struct sockaddr_in));
+ 
+         u->addrs[0].sockaddr = (struct sockaddr *) sin;
+         u->addrs[0].socklen = sizeof(struct sockaddr_in);
+@@ -790,7 +869,7 @@ ngx_parse_inet_url(ngx_pool_t *pool, ngx_url_t *u)
+ 
+     u->family = u->addrs[0].sockaddr->sa_family;
+     u->socklen = u->addrs[0].socklen;
+-    ngx_memcpy(u->sockaddr, u->addrs[0].sockaddr, u->addrs[0].socklen);
++    ngx_memcpy(&u->sockaddr, u->addrs[0].sockaddr, u->addrs[0].socklen);
+ 
+     switch (u->family) {
+ 
+@@ -843,47 +922,49 @@ ngx_parse_inet6_url(ngx_pool_t *pool, ngx_url_t *u)
+         return NGX_ERROR;
+     }
+ 
+-    if (last - p) {
++    port = p + 1;
+ 
+-        port = p + 1;
++    uri = ngx_strlchr(port, last, '/');
+ 
+-        uri = ngx_strlchr(port, last, '/');
++    if (uri) {
++        if (u->listen || !u->uri_part) {
++            u->err = "invalid host";
++            return NGX_ERROR;
++        }
+ 
+-        if (uri) {
+-            if (u->listen || !u->uri_part) {
+-                u->err = "invalid host";
+-                return NGX_ERROR;
+-            }
++        u->uri.len = last - uri;
++        u->uri.data = uri;
+ 
+-            u->uri.len = last - uri;
+-            u->uri.data = uri;
++        last = uri;
++    }
+ 
+-            last = uri;
++    if (port < last) {
++        if (*port != ':') {
++            u->err = "invalid host";
++            return NGX_ERROR;
+         }
+ 
+-        if (*port == ':') {
+-            port++;
++        port++;
+ 
+-            len = last - port;
++        len = last - port;
+ 
+-            n = ngx_atoi(port, len);
++        n = ngx_atoi(port, len);
+ 
+-            if (n < 1 || n > 65535) {
+-                u->err = "invalid port";
+-                return NGX_ERROR;
+-            }
++        if (n < 1 || n > 65535) {
++            u->err = "invalid port";
++            return NGX_ERROR;
++        }
+ 
+-            u->port = (in_port_t) n;
+-            sin6->sin6_port = htons((in_port_t) n);
++        u->port = (in_port_t) n;
++        sin6->sin6_port = htons((in_port_t) n);
+ 
+-            u->port_text.len = len;
+-            u->port_text.data = port;
++        u->port_text.len = len;
++        u->port_text.data = port;
+ 
+-        } else {
+-            u->no_port = 1;
+-            u->port = u->default_port;
+-            sin6->sin6_port = htons(u->default_port);
+-        }
++    } else {
++        u->no_port = 1;
++        u->port = u->default_port;
++        sin6->sin6_port = htons(u->default_port);
+     }
+ 
+     len = p - host;
+@@ -918,7 +999,7 @@ ngx_parse_inet6_url(ngx_pool_t *pool, ngx_url_t *u)
+         return NGX_ERROR;
+     }
+ 
+-    ngx_memcpy(sin6, u->sockaddr, sizeof(struct sockaddr_in6));
++    ngx_memcpy(sin6, &u->sockaddr, sizeof(struct sockaddr_in6));
+ 
+     u->addrs[0].sockaddr = (struct sockaddr *) sin6;
+     u->addrs[0].socklen = sizeof(struct sockaddr_in6);
+diff --git a/src/core/ngx_inet.h b/src/core/ngx_inet.h
+index 0555750..531d264 100644
+--- a/src/core/ngx_inet.h
++++ b/src/core/ngx_inet.h
+@@ -13,14 +13,6 @@
+ #include <ngx_core.h>
+ 
+ 
+-/*
+- * TODO: autoconfigure NGX_SOCKADDRLEN and NGX_SOCKADDR_STRLEN as
+- *       sizeof(struct sockaddr_storage)
+- *       sizeof(struct sockaddr_un)
+- *       sizeof(struct sockaddr_in6)
+- *       sizeof(struct sockaddr_in)
+- */
+-
+ #define NGX_INET_ADDRSTRLEN   (sizeof("255.255.255.255") - 1)
+ #define NGX_INET6_ADDRSTRLEN                                                 \
+     (sizeof("ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255") - 1)
+@@ -29,15 +21,26 @@
+ 
+ #if (NGX_HAVE_UNIX_DOMAIN)
+ #define NGX_SOCKADDR_STRLEN   (sizeof("unix:") - 1 + NGX_UNIX_ADDRSTRLEN)
+-#else
++#elif (NGX_HAVE_INET6)
+ #define NGX_SOCKADDR_STRLEN   (NGX_INET6_ADDRSTRLEN + sizeof("[]:65535") - 1)
++#else
++#define NGX_SOCKADDR_STRLEN   (NGX_INET_ADDRSTRLEN + sizeof(":65535") - 1)
+ #endif
+ 
++/* compatibility */
++#define NGX_SOCKADDRLEN       sizeof(ngx_sockaddr_t)
++
++
++typedef union {
++    struct sockaddr           sockaddr;
++    struct sockaddr_in        sockaddr_in;
++#if (NGX_HAVE_INET6)
++    struct sockaddr_in6       sockaddr_in6;
++#endif
+ #if (NGX_HAVE_UNIX_DOMAIN)
+-#define NGX_SOCKADDRLEN       sizeof(struct sockaddr_un)
+-#else
+-#define NGX_SOCKADDRLEN       512
++    struct sockaddr_un        sockaddr_un;
+ #endif
++} ngx_sockaddr_t;
+ 
+ 
+ typedef struct {
+@@ -87,13 +90,12 @@ typedef struct {
+     unsigned                  listen:1;
+     unsigned                  uri_part:1;
+     unsigned                  no_resolve:1;
+-    unsigned                  one_addr:1;  /* compatibility */
+ 
+     unsigned                  no_port:1;
+     unsigned                  wildcard:1;
+ 
+     socklen_t                 socklen;
+-    u_char                    sockaddr[NGX_SOCKADDRLEN];
++    ngx_sockaddr_t            sockaddr;
+ 
+     ngx_addr_t               *addrs;
+     ngx_uint_t                naddrs;
+@@ -113,6 +115,8 @@ size_t ngx_inet_ntop(int family, void *addr, u_char *text, size_t len);
+ ngx_int_t ngx_ptocidr(ngx_str_t *text, ngx_cidr_t *cidr);
+ ngx_int_t ngx_parse_addr(ngx_pool_t *pool, ngx_addr_t *addr, u_char *text,
+     size_t len);
++ngx_int_t ngx_parse_addr_port(ngx_pool_t *pool, ngx_addr_t *addr,
++    u_char *text, size_t len);
+ ngx_int_t ngx_parse_url(ngx_pool_t *pool, ngx_url_t *u);
+ ngx_int_t ngx_inet_resolve_host(ngx_pool_t *pool, ngx_url_t *u);
+ ngx_int_t ngx_cmp_sockaddr(struct sockaddr *sa1, socklen_t slen1,
+diff --git a/src/core/ngx_proxy_protocol.c b/src/core/ngx_proxy_protocol.c
+index f347e7f..3e54d42 100644
+--- a/src/core/ngx_proxy_protocol.c
++++ b/src/core/ngx_proxy_protocol.c
+@@ -12,8 +12,9 @@
+ u_char *
+ ngx_proxy_protocol_read(ngx_connection_t *c, u_char *buf, u_char *last)
+ {
+-    size_t  len;
+-    u_char  ch, *p, *addr;
++    size_t     len;
++    u_char     ch, *p, *addr, *port;
++    ngx_int_t  n;
+ 
+     p = buf;
+     len = last - buf;
+@@ -71,8 +72,40 @@ ngx_proxy_protocol_read(ngx_connection_t *c, u_char *buf, u_char *last)
+     ngx_memcpy(c->proxy_protocol_addr.data, addr, len);
+     c->proxy_protocol_addr.len = len;
+ 
+-    ngx_log_debug1(NGX_LOG_DEBUG_CORE, c->log, 0,
+-                   "PROXY protocol address: \"%V\"", &c->proxy_protocol_addr);
++    for ( ;; ) {
++        if (p == last) {
++            goto invalid;
++        }
++
++        if (*p++ == ' ') {
++            break;
++        }
++    }
++
++    port = p;
++
++    for ( ;; ) {
++        if (p == last) {
++            goto invalid;
++        }
++
++        if (*p++ == ' ') {
++            break;
++        }
++    }
++
++    len = p - port - 1;
++
++    n = ngx_atoi(port, len);
++
++    if (n < 0 || n > 65535) {
++        goto invalid;
++    }
++
++    c->proxy_protocol_port = (in_port_t) n;
++
++    ngx_log_debug2(NGX_LOG_DEBUG_CORE, c->log, 0,
++                   "PROXY protocol address: %V %i", &c->proxy_protocol_addr, n);
+ 
+ skip:
+ 
+diff --git a/src/core/ngx_resolver.c b/src/core/ngx_resolver.c
+index e00fe22..e06c2f8 100644
+--- a/src/core/ngx_resolver.c
++++ b/src/core/ngx_resolver.c
+@@ -2992,15 +2992,15 @@ failed:
+ static void
+ ngx_resolver_srv_names_handler(ngx_resolver_ctx_t *cctx)
+ {
+-    ngx_uint_t                 i;
+-    u_char                   (*sockaddr)[NGX_SOCKADDRLEN];
+-    ngx_addr_t                *addrs;
+-    ngx_resolver_t            *r;
+-    struct sockaddr_in        *sin;
+-    ngx_resolver_ctx_t        *ctx;
+-    ngx_resolver_srv_name_t   *srv;
++    ngx_uint_t                i;
++    ngx_addr_t               *addrs;
++    ngx_resolver_t           *r;
++    ngx_sockaddr_t           *sockaddr;
++    struct sockaddr_in       *sin;
++    ngx_resolver_ctx_t       *ctx;
++    ngx_resolver_srv_name_t  *srv;
+ #if (NGX_HAVE_INET6)
+-    struct sockaddr_in6       *sin6;
++    struct sockaddr_in6      *sin6;
+ #endif
+ 
+     r = cctx->resolver;
+@@ -3026,7 +3026,7 @@ ngx_resolver_srv_names_handler(ngx_resolver_ctx_t *cctx)
+             return;
+         }
+ 
+-        sockaddr = ngx_resolver_alloc(r, cctx->naddrs * NGX_SOCKADDRLEN);
++        sockaddr = ngx_resolver_alloc(r, cctx->naddrs * sizeof(ngx_sockaddr_t));
+         if (sockaddr == NULL) {
+             ngx_resolver_free(r, addrs);
+             ngx_resolve_name_done(cctx);
+@@ -3039,10 +3039,10 @@ ngx_resolver_srv_names_handler(ngx_resolver_ctx_t *cctx)
+         }
+ 
+         for (i = 0; i < cctx->naddrs; i++) {
+-            addrs[i].sockaddr = (struct sockaddr *) sockaddr[i];
++            addrs[i].sockaddr = &sockaddr[i].sockaddr;
+             addrs[i].socklen = cctx->addrs[i].socklen;
+ 
+-            ngx_memcpy(sockaddr[i], cctx->addrs[i].sockaddr,
++            ngx_memcpy(&sockaddr[i], cctx->addrs[i].sockaddr,
+                        addrs[i].socklen);
+ 
+             switch (addrs[i].sockaddr->sa_family) {
+@@ -4161,14 +4161,14 @@ static ngx_resolver_addr_t *
+ ngx_resolver_export(ngx_resolver_t *r, ngx_resolver_node_t *rn,
+     ngx_uint_t rotate)
+ {
+-    ngx_uint_t             d, i, j, n;
+-    u_char               (*sockaddr)[NGX_SOCKADDRLEN];
+-    in_addr_t             *addr;
+-    struct sockaddr_in    *sin;
+-    ngx_resolver_addr_t   *dst;
++    ngx_uint_t            d, i, j, n;
++    in_addr_t            *addr;
++    ngx_sockaddr_t       *sockaddr;
++    struct sockaddr_in   *sin;
++    ngx_resolver_addr_t  *dst;
+ #if (NGX_HAVE_INET6)
+-    struct in6_addr       *addr6;
+-    struct sockaddr_in6   *sin6;
++    struct in6_addr      *addr6;
++    struct sockaddr_in6  *sin6;
+ #endif
+ 
+     n = rn->naddrs;
+@@ -4181,7 +4181,7 @@ ngx_resolver_export(ngx_resolver_t *r, ngx_resolver_node_t *rn,
+         return NULL;
+     }
+ 
+-    sockaddr = ngx_resolver_calloc(r, n * NGX_SOCKADDRLEN);
++    sockaddr = ngx_resolver_calloc(r, n * sizeof(ngx_sockaddr_t));
+     if (sockaddr == NULL) {
+         ngx_resolver_free(r, dst);
+         return NULL;
+@@ -4196,7 +4196,7 @@ ngx_resolver_export(ngx_resolver_t *r, ngx_resolver_node_t *rn,
+         addr = (rn->naddrs == 1) ? &rn->u.addr : rn->u.addrs;
+ 
+         do {
+-            sin = (struct sockaddr_in *) sockaddr[d];
++            sin = &sockaddr[d].sockaddr_in;
+             sin->sin_family = AF_INET;
+             sin->sin_addr.s_addr = addr[j++];
+             dst[d].sockaddr = (struct sockaddr *) sin;
+@@ -4219,7 +4219,7 @@ ngx_resolver_export(ngx_resolver_t *r, ngx_resolver_node_t *rn,
+         addr6 = (rn->naddrs6 == 1) ? &rn->u6.addr6 : rn->u6.addrs6;
+ 
+         do {
+-            sin6 = (struct sockaddr_in6 *) sockaddr[d];
++            sin6 = &sockaddr[d].sockaddr_in6;
+             sin6->sin6_family = AF_INET6;
+             ngx_memcpy(sin6->sin6_addr.s6_addr, addr6[j++].s6_addr, 16);
+             dst[d].sockaddr = (struct sockaddr *) sin6;
+diff --git a/src/event/modules/ngx_epoll_module.c b/src/event/modules/ngx_epoll_module.c
+index 166c461..de5a942 100644
+--- a/src/event/modules/ngx_epoll_module.c
++++ b/src/event/modules/ngx_epoll_module.c
+@@ -105,6 +105,9 @@ static ngx_int_t ngx_epoll_init(ngx_cycle_t *cycle, ngx_msec_t timer);
+ static ngx_int_t ngx_epoll_notify_init(ngx_log_t *log);
+ static void ngx_epoll_notify_handler(ngx_event_t *ev);
+ #endif
++#if (NGX_HAVE_EPOLLRDHUP)
++static void ngx_epoll_test_rdhup(ngx_cycle_t *cycle);
++#endif
+ static void ngx_epoll_done(ngx_cycle_t *cycle);
+ static ngx_int_t ngx_epoll_add_event(ngx_event_t *ev, ngx_int_t event,
+     ngx_uint_t flags);
+@@ -146,6 +149,10 @@ static ngx_connection_t     ngx_eventfd_conn;
+ 
+ #endif
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++ngx_uint_t                  ngx_use_epoll_rdhup;
++#endif
++
+ static ngx_str_t      epoll_name = ngx_string("epoll");
+ 
+ static ngx_command_t  ngx_epoll_commands[] = {
+@@ -334,9 +341,11 @@ ngx_epoll_init(ngx_cycle_t *cycle, ngx_msec_t timer)
+ #endif
+ 
+ #if (NGX_HAVE_FILE_AIO)
+-
+         ngx_epoll_aio_init(cycle, epcf);
++#endif
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++        ngx_epoll_test_rdhup(cycle);
+ #endif
+     }
+ 
+@@ -449,6 +458,73 @@ ngx_epoll_notify_handler(ngx_event_t *ev)
+ #endif
+ 
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++
++static void
++ngx_epoll_test_rdhup(ngx_cycle_t *cycle)
++{
++    int                 s[2], events;
++    struct epoll_event  ee;
++
++    if (socketpair(AF_UNIX, SOCK_STREAM, 0, s) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
++                      "socketpair() failed");
++        return;
++    }
++
++    ee.events = EPOLLET|EPOLLIN|EPOLLRDHUP;
++
++    if (epoll_ctl(ep, EPOLL_CTL_ADD, s[0], &ee) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
++                      "epoll_ctl() failed");
++        goto failed;
++    }
++
++    if (close(s[1]) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
++                      "close() failed");
++        s[1] = -1;
++        goto failed;
++    }
++
++    s[1] = -1;
++
++    events = epoll_wait(ep, &ee, 1, 5000);
++
++    if (events == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
++                      "epoll_wait() failed");
++        goto failed;
++    }
++
++    if (events) {
++        ngx_use_epoll_rdhup = ee.events & EPOLLRDHUP;
++
++    } else {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, NGX_ETIMEDOUT,
++                      "epoll_wait() timed out");
++    }
++
++    ngx_log_debug1(NGX_LOG_DEBUG_EVENT, cycle->log, 0,
++                   "testing the EPOLLRDHUP flag: %s",
++                   ngx_use_epoll_rdhup ? "success" : "fail");
++
++failed:
++
++    if (s[1] != -1 && close(s[1]) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
++                      "close() failed");
++    }
++
++    if (close(s[0]) == -1) {
++        ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
++                      "close() failed");
++    }
++}
++
++#endif
++
++
+ static void
+ ngx_epoll_done(ngx_cycle_t *cycle)
+ {
+@@ -808,6 +884,8 @@ ngx_epoll_process_events(ngx_cycle_t *cycle, ngx_msec_t timer, ngx_uint_t flags)
+             if (revents & EPOLLRDHUP) {
+                 rev->pending_eof = 1;
+             }
++
++            rev->available = 1;
+ #endif
+ 
+             rev->ready = 1;
+diff --git a/src/event/ngx_event.h b/src/event/ngx_event.h
+index ed0682c..1c7c148 100644
+--- a/src/event/ngx_event.h
++++ b/src/event/ngx_event.h
+@@ -96,6 +96,10 @@ struct ngx_event_s {
+      *   write:      available space in buffer when event is ready
+      *               or lowat when event is set with NGX_LOWAT_EVENT flag
+      *
++     * epoll with EPOLLRDHUP:
++     *   accept:     1 if accept many, 0 otherwise
++     *   read:       1 if there can be data to read, 0 otherwise
++     *
+      * iocp: TODO
+      *
+      * otherwise:
+@@ -196,6 +200,9 @@ typedef struct {
+ 
+ 
+ extern ngx_event_actions_t   ngx_event_actions;
++#if (NGX_HAVE_EPOLLRDHUP)
++extern ngx_uint_t            ngx_use_epoll_rdhup;
++#endif
+ 
+ 
+ /*
+diff --git a/src/event/ngx_event_accept.c b/src/event/ngx_event_accept.c
+index 1c87a34..4445adc 100644
+--- a/src/event/ngx_event_accept.c
++++ b/src/event/ngx_event_accept.c
+@@ -28,10 +28,10 @@ ngx_event_accept(ngx_event_t *ev)
+     ngx_uint_t         level;
+     ngx_socket_t       s;
+     ngx_event_t       *rev, *wev;
++    ngx_sockaddr_t     sa;
+     ngx_listening_t   *ls;
+     ngx_connection_t  *c, *lc;
+     ngx_event_conf_t  *ecf;
+-    u_char             sa[NGX_SOCKADDRLEN];
+ #if (NGX_HAVE_ACCEPT4)
+     static ngx_uint_t  use_accept4 = 1;
+ #endif
+@@ -58,17 +58,16 @@ ngx_event_accept(ngx_event_t *ev)
+                    "accept on %V, ready: %d", &ls->addr_text, ev->available);
+ 
+     do {
+-        socklen = NGX_SOCKADDRLEN;
++        socklen = sizeof(ngx_sockaddr_t);
+ 
+ #if (NGX_HAVE_ACCEPT4)
+         if (use_accept4) {
+-            s = accept4(lc->fd, (struct sockaddr *) sa, &socklen,
+-                        SOCK_NONBLOCK);
++            s = accept4(lc->fd, &sa.sockaddr, &socklen, SOCK_NONBLOCK);
+         } else {
+-            s = accept(lc->fd, (struct sockaddr *) sa, &socklen);
++            s = accept(lc->fd, &sa.sockaddr, &socklen);
+         }
+ #else
+-        s = accept(lc->fd, (struct sockaddr *) sa, &socklen);
++        s = accept(lc->fd, &sa.sockaddr, &socklen);
+ #endif
+ 
+         if (s == (ngx_socket_t) -1) {
+@@ -171,7 +170,7 @@ ngx_event_accept(ngx_event_t *ev)
+             return;
+         }
+ 
+-        ngx_memcpy(c->sockaddr, sa, socklen);
++        ngx_memcpy(c->sockaddr, &sa, socklen);
+ 
+         log = ngx_palloc(c->pool, sizeof(ngx_log_t));
+         if (log == NULL) {
+@@ -217,8 +216,6 @@ ngx_event_accept(ngx_event_t *ev)
+         c->local_sockaddr = ls->sockaddr;
+         c->local_socklen = ls->socklen;
+ 
+-        c->unexpected_eof = 1;
+-
+ #if (NGX_HAVE_UNIX_DOMAIN)
+         if (c->sockaddr->sa_family == AF_UNIX) {
+             c->tcp_nopush = NGX_TCP_NOPUSH_DISABLED;
+@@ -330,10 +327,10 @@ ngx_event_recvmsg(ngx_event_t *ev)
+     ngx_event_t       *rev, *wev;
+     struct iovec       iov[1];
+     struct msghdr      msg;
++    ngx_sockaddr_t     sa;
+     ngx_listening_t   *ls;
+     ngx_event_conf_t  *ecf;
+     ngx_connection_t  *c, *lc;
+-    u_char             sa[NGX_SOCKADDRLEN];
+     static u_char      buffer[65535];
+ 
+ #if (NGX_HAVE_MSGHDR_MSG_CONTROL)
+@@ -378,7 +375,7 @@ ngx_event_recvmsg(ngx_event_t *ev)
+         iov[0].iov_len = sizeof(buffer);
+ 
+         msg.msg_name = &sa;
+-        msg.msg_namelen = sizeof(sa);
++        msg.msg_namelen = sizeof(ngx_sockaddr_t);
+         msg.msg_iov = iov;
+         msg.msg_iovlen = 1;
+ 
+diff --git a/src/event/ngx_event_connect.c b/src/event/ngx_event_connect.c
+index 8aca862..5de991e 100644
+--- a/src/event/ngx_event_connect.c
++++ b/src/event/ngx_event_connect.c
+@@ -11,6 +11,12 @@
+ #include <ngx_event_connect.h>
+ 
+ 
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++static ngx_int_t ngx_event_connect_set_transparent(ngx_peer_connection_t *pc,
++    ngx_socket_t s);
++#endif
++
++
+ ngx_int_t
+ ngx_event_connect_peer(ngx_peer_connection_t *pc)
+ {
+@@ -72,6 +78,15 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
+     }
+ 
+     if (pc->local) {
++
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++        if (pc->transparent) {
++            if (ngx_event_connect_set_transparent(pc, s) != NGX_OK) {
++                goto failed;
++            }
++        }
++#endif
++
+         if (bind(s, pc->local->sockaddr, pc->local->socklen) == -1) {
+             ngx_log_error(NGX_LOG_CRIT, pc->log, ngx_socket_errno,
+                           "bind(%V) failed", &pc->local->name);
+@@ -249,6 +264,94 @@ failed:
+ }
+ 
+ 
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++
++static ngx_int_t
++ngx_event_connect_set_transparent(ngx_peer_connection_t *pc, ngx_socket_t s)
++{
++    int  value;
++
++    value = 1;
++
++#if defined(SO_BINDANY)
++
++    if (setsockopt(s, SOL_SOCKET, SO_BINDANY,
++                   (const void *) &value, sizeof(int)) == -1)
++    {
++        ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno,
++                      "setsockopt(SO_BINDANY) failed");
++        return NGX_ERROR;
++    }
++
++#else
++
++    switch (pc->local->sockaddr->sa_family) {
++
++    case AF_INET:
++
++#if defined(IP_TRANSPARENT)
++
++        if (setsockopt(s, IPPROTO_IP, IP_TRANSPARENT,
++                       (const void *) &value, sizeof(int)) == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno,
++                          "setsockopt(IP_TRANSPARENT) failed");
++            return NGX_ERROR;
++        }
++
++#elif defined(IP_BINDANY)
++
++        if (setsockopt(s, IPPROTO_IP, IP_BINDANY,
++                       (const void *) &value, sizeof(int)) == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno,
++                          "setsockopt(IP_BINDANY) failed");
++            return NGX_ERROR;
++        }
++
++#endif
++
++        break;
++
++#if (NGX_HAVE_INET6)
++
++    case AF_INET6:
++
++#if defined(IPV6_TRANSPARENT)
++
++        if (setsockopt(s, IPPROTO_IPV6, IPV6_TRANSPARENT,
++                       (const void *) &value, sizeof(int)) == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno,
++                          "setsockopt(IPV6_TRANSPARENT) failed");
++            return NGX_ERROR;
++        }
++
++#elif defined(IPV6_BINDANY)
++
++        if (setsockopt(s, IPPROTO_IPV6, IPV6_BINDANY,
++                       (const void *) &value, sizeof(int)) == -1)
++        {
++            ngx_log_error(NGX_LOG_ALERT, pc->log, ngx_socket_errno,
++                          "setsockopt(IPV6_BINDANY) failed");
++            return NGX_ERROR;
++        }
++
++#endif
++        break;
++
++#endif /* NGX_HAVE_INET6 */
++
++    }
++
++#endif /* SO_BINDANY */
++
++    return NGX_OK;
++}
++
++#endif
++
++
+ ngx_int_t
+ ngx_event_get_peer(ngx_peer_connection_t *pc, void *data)
+ {
+diff --git a/src/event/ngx_event_connect.h b/src/event/ngx_event_connect.h
+index 1bacf82..10b72a1 100644
+--- a/src/event/ngx_event_connect.h
++++ b/src/event/ngx_event_connect.h
+@@ -61,6 +61,9 @@ struct ngx_peer_connection_s {
+     ngx_log_t                       *log;
+ 
+     unsigned                         cached:1;
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++    unsigned                         transparent:1;
++#endif
+ 
+                                      /* ngx_connection_log_error_e */
+     unsigned                         log_error:2;
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index de10296..810c469 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -105,6 +105,7 @@ int  ngx_ssl_server_conf_index;
+ int  ngx_ssl_session_cache_index;
+ int  ngx_ssl_session_ticket_keys_index;
+ int  ngx_ssl_certificate_index;
++int  ngx_ssl_next_certificate_index;
+ int  ngx_ssl_stapling_index;
+ 
+ 
+@@ -187,11 +188,17 @@ ngx_ssl_init(ngx_log_t *log)
+         return NGX_ERROR;
+     }
+ 
+-    ngx_ssl_stapling_index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL,
+-                                                      NULL);
++    ngx_ssl_next_certificate_index = X509_get_ex_new_index(0, NULL, NULL, NULL,
++                                                           NULL);
++    if (ngx_ssl_next_certificate_index == -1) {
++        ngx_ssl_error(NGX_LOG_ALERT, log, 0, "X509_get_ex_new_index() failed");
++        return NGX_ERROR;
++    }
++
++    ngx_ssl_stapling_index = X509_get_ex_new_index(0, NULL, NULL, NULL, NULL);
++
+     if (ngx_ssl_stapling_index == -1) {
+-        ngx_ssl_error(NGX_LOG_ALERT, log, 0,
+-                      "SSL_CTX_get_ex_new_index() failed");
++        ngx_ssl_error(NGX_LOG_ALERT, log, 0, "X509_get_ex_new_index() failed");
+         return NGX_ERROR;
+     }
+ 
+@@ -215,6 +222,12 @@ ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
+         return NGX_ERROR;
+     }
+ 
++    if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_certificate_index, NULL) == 0) {
++        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                      "SSL_CTX_set_ex_data() failed");
++        return NGX_ERROR;
++    }
++
+     ssl->buffer_size = NGX_SSL_BUFSIZE;
+ 
+     /* client side options */
+@@ -309,6 +322,29 @@ ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data)
+ 
+ 
+ ngx_int_t
++ngx_ssl_certificates(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_array_t *certs,
++    ngx_array_t *keys, ngx_array_t *passwords)
++{
++    ngx_str_t   *cert, *key;
++    ngx_uint_t   i;
++
++    cert = certs->elts;
++    key = keys->elts;
++
++    for (i = 0; i < certs->nelts; i++) {
++
++        if (ngx_ssl_certificate(cf, ssl, &cert[i], &key[i], passwords)
++            != NGX_OK)
++        {
++            return NGX_ERROR;
++        }
++    }
++
++    return NGX_OK;
++}
++
++
++ngx_int_t
+ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+     ngx_str_t *key, ngx_array_t *passwords)
+ {
+@@ -351,6 +387,16 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+         return NGX_ERROR;
+     }
+ 
++    if (X509_set_ex_data(x509, ngx_ssl_next_certificate_index,
++                      SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index))
++        == 0)
++    {
++        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0, "X509_set_ex_data() failed");
++        X509_free(x509);
++        BIO_free(bio);
++        return NGX_ERROR;
++    }
++
+     if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_certificate_index, x509)
+         == 0)
+     {
+@@ -361,8 +407,6 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+         return NGX_ERROR;
+     }
+ 
+-    X509_free(x509);
+-
+     /* read rest of the chain */
+ 
+     for ( ;; ) {
+@@ -387,6 +431,24 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+             return NGX_ERROR;
+         }
+ 
++#ifdef SSL_CTRL_CHAIN_CERT
++
++        /*
++         * SSL_CTX_add0_chain_cert() is needed to add chain to
++         * a particular certificate when multiple certificates are used;
++         * only available in OpenSSL 1.0.2+
++         */
++
++        if (SSL_CTX_add0_chain_cert(ssl->ctx, x509) == 0) {
++            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                          "SSL_CTX_add0_chain_cert(\"%s\") failed",
++                          cert->data);
++            X509_free(x509);
++            BIO_free(bio);
++            return NGX_ERROR;
++        }
++
++#else
+         if (SSL_CTX_add_extra_chain_cert(ssl->ctx, x509) == 0) {
+             ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+                           "SSL_CTX_add_extra_chain_cert(\"%s\") failed",
+@@ -395,6 +457,7 @@ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+             BIO_free(bio);
+             return NGX_ERROR;
+         }
++#endif
+     }
+ 
+     BIO_free(bio);
+@@ -918,52 +981,7 @@ ngx_ssl_dhparam(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file)
+     DH   *dh;
+     BIO  *bio;
+ 
+-    /*
+-     * -----BEGIN DH PARAMETERS-----
+-     * MIGHAoGBALu8LcrYRnSQfEP89YDpz9vZWKP1aLQtSwju1OsPs1BMbAMCducQgAxc
+-     * y7qokiYUxb7spWWl/fHSh6K8BJvmd4Bg6RqSp1fjBI9osHb302zI8pul34HcLKcl
+-     * 7OZicMyaUDXYzs7vnqAnSmOrHlj6/UmI0PZdFGdX2gcd8EXP4WubAgEC
+-     * -----END DH PARAMETERS-----
+-     */
+-
+-    static unsigned char dh1024_p[] = {
+-        0xBB, 0xBC, 0x2D, 0xCA, 0xD8, 0x46, 0x74, 0x90, 0x7C, 0x43, 0xFC, 0xF5,
+-        0x80, 0xE9, 0xCF, 0xDB, 0xD9, 0x58, 0xA3, 0xF5, 0x68, 0xB4, 0x2D, 0x4B,
+-        0x08, 0xEE, 0xD4, 0xEB, 0x0F, 0xB3, 0x50, 0x4C, 0x6C, 0x03, 0x02, 0x76,
+-        0xE7, 0x10, 0x80, 0x0C, 0x5C, 0xCB, 0xBA, 0xA8, 0x92, 0x26, 0x14, 0xC5,
+-        0xBE, 0xEC, 0xA5, 0x65, 0xA5, 0xFD, 0xF1, 0xD2, 0x87, 0xA2, 0xBC, 0x04,
+-        0x9B, 0xE6, 0x77, 0x80, 0x60, 0xE9, 0x1A, 0x92, 0xA7, 0x57, 0xE3, 0x04,
+-        0x8F, 0x68, 0xB0, 0x76, 0xF7, 0xD3, 0x6C, 0xC8, 0xF2, 0x9B, 0xA5, 0xDF,
+-        0x81, 0xDC, 0x2C, 0xA7, 0x25, 0xEC, 0xE6, 0x62, 0x70, 0xCC, 0x9A, 0x50,
+-        0x35, 0xD8, 0xCE, 0xCE, 0xEF, 0x9E, 0xA0, 0x27, 0x4A, 0x63, 0xAB, 0x1E,
+-        0x58, 0xFA, 0xFD, 0x49, 0x88, 0xD0, 0xF6, 0x5D, 0x14, 0x67, 0x57, 0xDA,
+-        0x07, 0x1D, 0xF0, 0x45, 0xCF, 0xE1, 0x6B, 0x9B
+-    };
+-
+-    static unsigned char dh1024_g[] = { 0x02 };
+-
+-
+     if (file->len == 0) {
+-
+-        dh = DH_new();
+-        if (dh == NULL) {
+-            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0, "DH_new() failed");
+-            return NGX_ERROR;
+-        }
+-
+-        dh->p = BN_bin2bn(dh1024_p, sizeof(dh1024_p), NULL);
+-        dh->g = BN_bin2bn(dh1024_g, sizeof(dh1024_g), NULL);
+-
+-        if (dh->p == NULL || dh->g == NULL) {
+-            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0, "BN_bin2bn() failed");
+-            DH_free(dh);
+-            return NGX_ERROR;
+-        }
+-
+-        SSL_CTX_set_tmp_dh(ssl->ctx, dh);
+-
+-        DH_free(dh);
+-
+         return NGX_OK;
+     }
+ 
+@@ -1000,27 +1018,69 @@ ngx_ssl_ecdh_curve(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *name)
+ {
+ #if OPENSSL_VERSION_NUMBER >= 0x0090800fL
+ #ifndef OPENSSL_NO_ECDH
+-    int      nid;
+-    EC_KEY  *ecdh;
+ 
+     /*
+      * Elliptic-Curve Diffie-Hellman parameters are either "named curves"
+      * from RFC 4492 section 5.1.1, or explicitly described curves over
+-     * binary fields. OpenSSL only supports the "named curves", which provide
++     * binary fields.  OpenSSL only supports the "named curves", which provide
+      * maximum interoperability.
+      */
+ 
+-    nid = OBJ_sn2nid((const char *) name->data);
++#ifdef SSL_CTRL_SET_CURVES_LIST
++
++    /*
++     * OpenSSL 1.0.2+ allows configuring a curve list instead of a single
++     * curve previously supported.  By default an internal list is used,
++     * with prime256v1 being preferred by server in OpenSSL 1.0.2b+
++     * and X25519 in OpenSSL 1.1.0+.
++     *
++     * By default a curve preferred by the client will be used for
++     * key exchange.  The SSL_OP_CIPHER_SERVER_PREFERENCE option can
++     * be used to prefer server curves instead, similar to what it
++     * does for ciphers.
++     */
++
++    SSL_CTX_set_options(ssl->ctx, SSL_OP_SINGLE_ECDH_USE);
++
++#if SSL_CTRL_SET_ECDH_AUTO
++    /* not needed in OpenSSL 1.1.0+ */
++    SSL_CTX_set_ecdh_auto(ssl->ctx, 1);
++#endif
++
++    if (ngx_strcmp(name->data, "auto") == 0) {
++        return NGX_OK;
++    }
++
++    if (SSL_CTX_set1_curves_list(ssl->ctx, (char *) name->data) == 0) {
++        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                      "SSL_CTX_set1_curves_list(\"%s\") failed", name->data);
++        return NGX_ERROR;
++    }
++
++#else
++
++    int      nid;
++    char    *curve;
++    EC_KEY  *ecdh;
++
++    if (ngx_strcmp(name->data, "auto") == 0) {
++        curve = "prime256v1";
++
++    } else {
++        curve = (char *) name->data;
++    }
++
++    nid = OBJ_sn2nid(curve);
+     if (nid == 0) {
+         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "Unknown curve name \"%s\"", name->data);
++                      "OBJ_sn2nid(\"%s\") failed: unknown curve", curve);
+         return NGX_ERROR;
+     }
+ 
+     ecdh = EC_KEY_new_by_curve_name(nid);
+     if (ecdh == NULL) {
+         ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "Unable to create curve \"%s\"", name->data);
++                      "EC_KEY_new_by_curve_name(\"%s\") failed", curve);
+         return NGX_ERROR;
+     }
+ 
+@@ -1031,6 +1091,7 @@ ngx_ssl_ecdh_curve(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *name)
+     EC_KEY_free(ecdh);
+ #endif
+ #endif
++#endif
+ 
+     return NGX_OK;
+ }
+@@ -2102,7 +2163,7 @@ ngx_ssl_session_cache(ngx_ssl_t *ssl, ngx_str_t *sess_ctx,
+          * session reuse (see SSL_SESS_CACHE_OFF above), then
+          * Outlook Express fails to upload a sent email to
+          * the Sent Items folder on the IMAP server via a separate IMAP
+-         * connection in the background. Therefore we have a special
++         * connection in the background.  Therefore we have a special
+          * mode (SSL_SESS_CACHE_SERVER|SSL_SESS_CACHE_NO_INTERNAL_STORE)
+          * where the server pretends that it supports session reuse,
+          * but it does not actually store any session.
+@@ -2164,7 +2225,7 @@ ngx_ssl_session_id_context(ngx_ssl_t *ssl, ngx_str_t *sess_ctx)
+ 
+     /*
+      * Session ID context is set based on the string provided,
+-     * the server certificate, and the client CA list.
++     * the server certificates, and the client CA list.
+      */
+ 
+     md = EVP_MD_CTX_create();
+@@ -2184,18 +2245,21 @@ ngx_ssl_session_id_context(ngx_ssl_t *ssl, ngx_str_t *sess_ctx)
+         goto failed;
+     }
+ 
+-    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
+-
+-    if (X509_digest(cert, EVP_sha1(), buf, &len) == 0) {
+-        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "X509_digest() failed");
+-        goto failed;
+-    }
++    for (cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++         cert;
++         cert = X509_get_ex_data(cert, ngx_ssl_next_certificate_index))
++    {
++        if (X509_digest(cert, EVP_sha1(), buf, &len) == 0) {
++            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                          "X509_digest() failed");
++            goto failed;
++        }
+ 
+-    if (EVP_DigestUpdate(md, buf, len) == 0) {
+-        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "EVP_DigestUpdate() failed");
+-        goto failed;
++        if (EVP_DigestUpdate(md, buf, len) == 0) {
++            ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
++                          "EVP_DigestUpdate() failed");
++            goto failed;
++        }
+     }
+ 
+     list = SSL_CTX_get_client_CA_list(ssl->ctx);
+@@ -2951,6 +3015,16 @@ ngx_ssl_cleanup_ctx(void *data)
+ {
+     ngx_ssl_t  *ssl = data;
+ 
++    X509  *cert, *next;
++
++    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++
++    while (cert) {
++        next = X509_get_ex_data(cert, ngx_ssl_next_certificate_index);
++        X509_free(cert);
++        cert = next;
++    }
++
+     SSL_CTX_free(ssl->ctx);
+ }
+ 
+@@ -3526,7 +3600,7 @@ ngx_openssl_engine(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     value = cf->args->elts;
+ 
+-    engine = ENGINE_by_id((const char *) value[1].data);
++    engine = ENGINE_by_id((char *) value[1].data);
+ 
+     if (engine == NULL) {
+         ngx_ssl_error(NGX_LOG_WARN, cf->log, 0,
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index 09654db..fc9ec05 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -140,6 +140,8 @@ typedef struct {
+ 
+ ngx_int_t ngx_ssl_init(ngx_log_t *log);
+ ngx_int_t ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data);
++ngx_int_t ngx_ssl_certificates(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_array_t *certs, ngx_array_t *keys, ngx_array_t *passwords);
+ ngx_int_t ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *cert, ngx_str_t *key, ngx_array_t *passwords);
+ ngx_int_t ngx_ssl_client_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -227,6 +229,7 @@ extern int  ngx_ssl_server_conf_index;
+ extern int  ngx_ssl_session_cache_index;
+ extern int  ngx_ssl_session_ticket_keys_index;
+ extern int  ngx_ssl_certificate_index;
++extern int  ngx_ssl_next_certificate_index;
+ extern int  ngx_ssl_stapling_index;
+ 
+ 
+diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
+index 5322b1b..49762eb 100644
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -83,11 +83,14 @@ struct ngx_ssl_ocsp_ctx_s {
+ };
+ 
+ 
++static ngx_int_t ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    X509 *cert, ngx_str_t *file, ngx_str_t *responder, ngx_uint_t verify);
+ static ngx_int_t ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *file);
+-static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl);
++    ngx_ssl_stapling_t *staple, ngx_str_t *file);
++static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_ssl_stapling_t *staple);
+ static ngx_int_t ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *responder);
++    ngx_ssl_stapling_t *staple, ngx_str_t *responder);
+ 
+ static int ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn,
+     void *data);
+@@ -121,9 +124,32 @@ ngx_int_t
+ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+     ngx_str_t *responder, ngx_uint_t verify)
+ {
+-    ngx_int_t                  rc;
+-    ngx_pool_cleanup_t        *cln;
+-    ngx_ssl_stapling_t        *staple;
++    X509  *cert;
++
++    for (cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++         cert;
++         cert = X509_get_ex_data(cert, ngx_ssl_next_certificate_index))
++    {
++        if (ngx_ssl_stapling_certificate(cf, ssl, cert, file, responder, verify)
++            != NGX_OK)
++        {
++            return NGX_ERROR;
++        }
++    }
++
++    SSL_CTX_set_tlsext_status_cb(ssl->ctx, ngx_ssl_certificate_status_callback);
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t
++ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, X509 *cert,
++    ngx_str_t *file, ngx_str_t *responder, ngx_uint_t verify)
++{
++    ngx_int_t            rc;
++    ngx_pool_cleanup_t  *cln;
++    ngx_ssl_stapling_t  *staple;
+ 
+     staple = ngx_pcalloc(cf->pool, sizeof(ngx_ssl_stapling_t));
+     if (staple == NULL) {
+@@ -138,29 +164,27 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+     cln->handler = ngx_ssl_stapling_cleanup;
+     cln->data = staple;
+ 
+-    if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_stapling_index, staple)
+-        == 0)
+-    {
+-        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0,
+-                      "SSL_CTX_set_ex_data() failed");
++    if (X509_set_ex_data(cert, ngx_ssl_stapling_index, staple) == 0) {
++        ngx_ssl_error(NGX_LOG_EMERG, ssl->log, 0, "X509_set_ex_data() failed");
+         return NGX_ERROR;
+     }
+ 
+     staple->ssl_ctx = ssl->ctx;
+     staple->timeout = 60000;
+     staple->verify = verify;
++    staple->cert = cert;
+ 
+     if (file->len) {
+         /* use OCSP response from the file */
+ 
+-        if (ngx_ssl_stapling_file(cf, ssl, file) != NGX_OK) {
++        if (ngx_ssl_stapling_file(cf, ssl, staple, file) != NGX_OK) {
+             return NGX_ERROR;
+         }
+ 
+-        goto done;
++        return NGX_OK;
+     }
+ 
+-    rc = ngx_ssl_stapling_issuer(cf, ssl);
++    rc = ngx_ssl_stapling_issuer(cf, ssl, staple);
+ 
+     if (rc == NGX_DECLINED) {
+         return NGX_OK;
+@@ -170,7 +194,7 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+         return NGX_ERROR;
+     }
+ 
+-    rc = ngx_ssl_stapling_responder(cf, ssl, responder);
++    rc = ngx_ssl_stapling_responder(cf, ssl, staple, responder);
+ 
+     if (rc == NGX_DECLINED) {
+         return NGX_OK;
+@@ -180,25 +204,18 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+         return NGX_ERROR;
+     }
+ 
+-done:
+-
+-    SSL_CTX_set_tlsext_status_cb(ssl->ctx, ngx_ssl_certificate_status_callback);
+-    SSL_CTX_set_tlsext_status_arg(ssl->ctx, staple);
+-
+     return NGX_OK;
+ }
+ 
+ 
+ static ngx_int_t
+-ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file)
++ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_ssl_stapling_t *staple, ngx_str_t *file)
+ {
+-    BIO                 *bio;
+-    int                  len;
+-    u_char              *p, *buf;
+-    OCSP_RESPONSE       *response;
+-    ngx_ssl_stapling_t  *staple;
+-
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
++    BIO            *bio;
++    int             len;
++    u_char         *p, *buf;
++    OCSP_RESPONSE  *response;
+ 
+     if (ngx_conf_full_name(cf->cycle, file, 1) != NGX_OK) {
+         return NGX_ERROR;
+@@ -259,19 +276,24 @@ failed:
+ 
+ 
+ static ngx_int_t
+-ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
++ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_ssl_stapling_t *staple)
+ {
+-    int                  i, n, rc;
+-    X509                *cert, *issuer;
+-    X509_STORE          *store;
+-    X509_STORE_CTX      *store_ctx;
+-    STACK_OF(X509)      *chain;
+-    ngx_ssl_stapling_t  *staple;
++    int              i, n, rc;
++    X509            *cert, *issuer;
++    X509_STORE      *store;
++    X509_STORE_CTX  *store_ctx;
++    STACK_OF(X509)  *chain;
++
++    cert = staple->cert;
+ 
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+-    cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++#ifdef SSL_CTRL_SELECT_CURRENT_CERT
++    /* OpenSSL 1.0.2+ */
++    SSL_CTX_select_current_cert(ssl->ctx, cert);
++#endif
+ 
+-#if OPENSSL_VERSION_NUMBER >= 0x10001000L
++#ifdef SSL_CTRL_GET_EXTRA_CHAIN_CERTS
++    /* OpenSSL 1.0.1+ */
+     SSL_CTX_get_extra_chain_certs(ssl->ctx, &chain);
+ #else
+     chain = ssl->ctx->extra_certs;
+@@ -294,7 +316,6 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+             ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ssl->log, 0,
+                            "SSL get issuer: found %p in extra certs", issuer);
+ 
+-            staple->cert = cert;
+             staple->issuer = issuer;
+ 
+             return NGX_OK;
+@@ -343,7 +364,6 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+     ngx_log_debug1(NGX_LOG_DEBUG_EVENT, ssl->log, 0,
+                    "SSL get issuer: found %p in cert store", issuer);
+ 
+-    staple->cert = cert;
+     staple->issuer = issuer;
+ 
+     return NGX_OK;
+@@ -351,15 +371,13 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl)
+ 
+ 
+ static ngx_int_t
+-ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *responder)
++ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    ngx_ssl_stapling_t *staple, ngx_str_t *responder)
+ {
+     ngx_url_t                  u;
+     char                      *s;
+-    ngx_ssl_stapling_t        *staple;
+     STACK_OF(OPENSSL_STRING)  *aia;
+ 
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+-
+     if (responder->len == 0) {
+ 
+         /* extract OCSP responder URL from certificate */
+@@ -443,12 +461,17 @@ ngx_int_t
+ ngx_ssl_stapling_resolver(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_resolver_t *resolver, ngx_msec_t resolver_timeout)
+ {
++    X509                *cert;
+     ngx_ssl_stapling_t  *staple;
+ 
+-    staple = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_stapling_index);
+-
+-    staple->resolver = resolver;
+-    staple->resolver_timeout = resolver_timeout;
++    for (cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
++         cert;
++         cert = X509_get_ex_data(cert, ngx_ssl_next_certificate_index))
++    {
++        staple = X509_get_ex_data(cert, ngx_ssl_stapling_index);
++        staple->resolver = resolver;
++        staple->resolver_timeout = resolver_timeout;
++    }
+ 
+     return NGX_OK;
+ }
+@@ -458,6 +481,7 @@ static int
+ ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn, void *data)
+ {
+     int                  rc;
++    X509                *cert;
+     u_char              *p;
+     ngx_connection_t    *c;
+     ngx_ssl_stapling_t  *staple;
+@@ -467,9 +491,15 @@ ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn, void *data)
+     ngx_log_debug0(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                    "SSL certificate status callback");
+ 
+-    staple = data;
+     rc = SSL_TLSEXT_ERR_NOACK;
+ 
++    cert = SSL_get_certificate(ssl_conn);
++    staple = X509_get_ex_data(cert, ngx_ssl_stapling_index);
++
++    if (staple == NULL) {
++        return rc;
++    }
++
+     if (staple->staple.len
+         && staple->valid >= ngx_time())
+     {
+@@ -597,7 +627,13 @@ ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx)
+         goto error;
+     }
+ 
+-#if OPENSSL_VERSION_NUMBER >= 0x10001000L
++#ifdef SSL_CTRL_SELECT_CURRENT_CERT
++    /* OpenSSL 1.0.2+ */
++    SSL_CTX_select_current_cert(staple->ssl_ctx, ctx->cert);
++#endif
++
++#ifdef SSL_CTRL_GET_EXTRA_CHAIN_CERTS
++    /* OpenSSL 1.0.1+ */
+     SSL_CTX_get_extra_chain_certs(staple->ssl_ctx, &chain);
+ #else
+     chain = staple->ssl_ctx->extra_certs;
+diff --git a/src/http/modules/ngx_http_dav_module.c b/src/http/modules/ngx_http_dav_module.c
+index 3600265..012a0fb 100644
+--- a/src/http/modules/ngx_http_dav_module.c
++++ b/src/http/modules/ngx_http_dav_module.c
+@@ -161,6 +161,12 @@ ngx_http_dav_handler(ngx_http_request_t *r)
+             return NGX_HTTP_CONFLICT;
+         }
+ 
++        if (r->headers_in.content_range) {
++            ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
++                          "PUT with range is unsupported");
++            return NGX_HTTP_NOT_IMPLEMENTED;
++        }
++
+         r->request_body_in_file_only = 1;
+         r->request_body_in_persistent_file = 1;
+         r->request_body_in_clean_file = 1;
+diff --git a/src/http/modules/ngx_http_fastcgi_module.c b/src/http/modules/ngx_http_fastcgi_module.c
+index 2d288ce..62502b0 100644
+--- a/src/http/modules/ngx_http_fastcgi_module.c
++++ b/src/http/modules/ngx_http_fastcgi_module.c
+@@ -279,7 +279,7 @@ static ngx_command_t  ngx_http_fastcgi_commands[] = {
+       NULL },
+ 
+     { ngx_string("fastcgi_bind"),
+-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+       ngx_http_upstream_bind_set_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_fastcgi_loc_conf_t, upstream.local),
+diff --git a/src/http/modules/ngx_http_map_module.c b/src/http/modules/ngx_http_map_module.c
+index 091ff09..732aa5d 100644
+--- a/src/http/modules/ngx_http_map_module.c
++++ b/src/http/modules/ngx_http_map_module.c
+@@ -20,7 +20,6 @@ typedef struct {
+     ngx_hash_keys_arrays_t      keys;
+ 
+     ngx_array_t                *values_hash;
+-    ngx_array_t                 var_values;
+ #if (NGX_PCRE)
+     ngx_array_t                 regexes;
+ #endif
+@@ -110,7 +109,8 @@ ngx_http_map_variable(ngx_http_request_t *r, ngx_http_variable_value_t *v,
+ {
+     ngx_http_map_ctx_t  *map = (ngx_http_map_ctx_t *) data;
+ 
+-    ngx_str_t                   val;
++    ngx_str_t                   val, str;
++    ngx_http_complex_value_t   *cv;
+     ngx_http_variable_value_t  *value;
+ 
+     ngx_log_debug0(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+@@ -131,14 +131,21 @@ ngx_http_map_variable(ngx_http_request_t *r, ngx_http_variable_value_t *v,
+     }
+ 
+     if (!value->valid) {
+-        value = ngx_http_get_flushed_variable(r, (uintptr_t) value->data);
++        cv = (ngx_http_complex_value_t *) value->data;
+ 
+-        if (value == NULL || value->not_found) {
+-            value = &ngx_http_variable_null_value;
++        if (ngx_http_complex_value(r, cv, &str) != NGX_OK) {
++            return NGX_ERROR;
+         }
+-    }
+ 
+-    *v = *value;
++        v->valid = 1;
++        v->no_cacheable = 0;
++        v->not_found = 0;
++        v->len = str.len;
++        v->data = str.data;
++
++    } else {
++        *v = *value;
++    }
+ 
+     ngx_log_debug2(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                    "http map: \"%V\" \"%v\"", &val, v);
+@@ -246,14 +253,6 @@ ngx_http_map_block(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+         return NGX_CONF_ERROR;
+     }
+ 
+-    if (ngx_array_init(&ctx.var_values, cf->pool, 2,
+-                       sizeof(ngx_http_variable_value_t))
+-        != NGX_OK)
+-    {
+-        ngx_destroy_pool(pool);
+-        return NGX_CONF_ERROR;
+-    }
+-
+ #if (NGX_PCRE)
+     if (ngx_array_init(&ctx.regexes, cf->pool, 2, sizeof(ngx_http_map_regex_t))
+         != NGX_OK)
+@@ -375,11 +374,15 @@ ngx_http_map_cmp_dns_wildcards(const void *one, const void *two)
+ static char *
+ ngx_http_map(ngx_conf_t *cf, ngx_command_t *dummy, void *conf)
+ {
+-    ngx_int_t                   rv, index;
+-    ngx_str_t                  *value, name;
+-    ngx_uint_t                  i, key;
+-    ngx_http_map_conf_ctx_t    *ctx;
+-    ngx_http_variable_value_t  *var, **vp;
++    u_char                            *data;
++    size_t                             len;
++    ngx_int_t                          rv;
++    ngx_str_t                         *value, v;
++    ngx_uint_t                         i, key;
++    ngx_http_map_conf_ctx_t           *ctx;
++    ngx_http_complex_value_t           cv, *cvp;
++    ngx_http_variable_value_t         *var, **vp;
++    ngx_http_compile_complex_value_t   ccv;
+ 
+     ctx = cf->ctx;
+ 
+@@ -401,39 +404,6 @@ ngx_http_map(ngx_conf_t *cf, ngx_command_t *dummy, void *conf)
+         return ngx_conf_include(cf, dummy, conf);
+     }
+ 
+-    if (value[1].data[0] == '$') {
+-        name = value[1];
+-        name.len--;
+-        name.data++;
+-
+-        index = ngx_http_get_variable_index(ctx->cf, &name);
+-        if (index == NGX_ERROR) {
+-            return NGX_CONF_ERROR;
+-        }
+-
+-        var = ctx->var_values.elts;
+-
+-        for (i = 0; i < ctx->var_values.nelts; i++) {
+-            if (index == (intptr_t) var[i].data) {
+-                var = &var[i];
+-                goto found;
+-            }
+-        }
+-
+-        var = ngx_array_push(&ctx->var_values);
+-        if (var == NULL) {
+-            return NGX_CONF_ERROR;
+-        }
+-
+-        var->valid = 0;
+-        var->no_cacheable = 0;
+-        var->not_found = 0;
+-        var->len = 0;
+-        var->data = (u_char *) (intptr_t) index;
+-
+-        goto found;
+-    }
+-
+     key = 0;
+ 
+     for (i = 0; i < value[1].len; i++) {
+@@ -446,11 +416,22 @@ ngx_http_map(ngx_conf_t *cf, ngx_command_t *dummy, void *conf)
+ 
+     if (vp) {
+         for (i = 0; i < ctx->values_hash[key].nelts; i++) {
+-            if (value[1].len != (size_t) vp[i]->len) {
++
++            if (vp[i]->valid) {
++                data = vp[i]->data;
++                len = vp[i]->len;
++
++            } else {
++                cvp = (ngx_http_complex_value_t *) vp[i]->data;
++                data = cvp->value.data;
++                len = cvp->value.len;
++            }
++
++            if (value[1].len != len) {
+                 continue;
+             }
+ 
+-            if (ngx_strncmp(value[1].data, vp[i]->data, value[1].len) == 0) {
++            if (ngx_strncmp(value[1].data, data, len) == 0) {
+                 var = vp[i];
+                 goto found;
+             }
+@@ -470,13 +451,40 @@ ngx_http_map(ngx_conf_t *cf, ngx_command_t *dummy, void *conf)
+         return NGX_CONF_ERROR;
+     }
+ 
+-    var->len = value[1].len;
+-    var->data = ngx_pstrdup(ctx->keys.pool, &value[1]);
+-    if (var->data == NULL) {
++    v.len = value[1].len;
++    v.data = ngx_pstrdup(ctx->keys.pool, &value[1]);
++    if (v.data == NULL) {
++        return NGX_CONF_ERROR;
++    }
++
++    ngx_memzero(&ccv, sizeof(ngx_http_compile_complex_value_t));
++
++    ccv.cf = ctx->cf;
++    ccv.value = &v;
++    ccv.complex_value = &cv;
++
++    if (ngx_http_compile_complex_value(&ccv) != NGX_OK) {
+         return NGX_CONF_ERROR;
+     }
+ 
+-    var->valid = 1;
++    if (cv.lengths != NULL) {
++        cvp = ngx_palloc(ctx->keys.pool, sizeof(ngx_http_complex_value_t));
++        if (cvp == NULL) {
++            return NGX_CONF_ERROR;
++        }
++
++        *cvp = cv;
++
++        var->len = 0;
++        var->data = (u_char *) cvp;
++        var->valid = 0;
++
++    } else {
++        var->len = v.len;
++        var->data = v.data;
++        var->valid = 1;
++    }
++
+     var->no_cacheable = 0;
+     var->not_found = 0;
+ 
+diff --git a/src/http/modules/ngx_http_memcached_module.c b/src/http/modules/ngx_http_memcached_module.c
+index d31996a..69f28fa 100644
+--- a/src/http/modules/ngx_http_memcached_module.c
++++ b/src/http/modules/ngx_http_memcached_module.c
+@@ -61,7 +61,7 @@ static ngx_command_t  ngx_http_memcached_commands[] = {
+       NULL },
+ 
+     { ngx_string("memcached_bind"),
+-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+       ngx_http_upstream_bind_set_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_memcached_loc_conf_t, upstream.local),
+diff --git a/src/http/modules/ngx_http_proxy_module.c b/src/http/modules/ngx_http_proxy_module.c
+index c24ef17..5efee7b 100644
+--- a/src/http/modules/ngx_http_proxy_module.c
++++ b/src/http/modules/ngx_http_proxy_module.c
+@@ -316,7 +316,7 @@ static ngx_command_t  ngx_http_proxy_commands[] = {
+       NULL },
+ 
+     { ngx_string("proxy_bind"),
+-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+       ngx_http_upstream_bind_set_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_proxy_loc_conf_t, upstream.local),
+diff --git a/src/http/modules/ngx_http_realip_module.c b/src/http/modules/ngx_http_realip_module.c
+index b7befe6..fca81eb 100644
+--- a/src/http/modules/ngx_http_realip_module.c
++++ b/src/http/modules/ngx_http_realip_module.c
+@@ -45,10 +45,14 @@ static char *ngx_http_realip_merge_loc_conf(ngx_conf_t *cf,
+     void *parent, void *child);
+ static ngx_int_t ngx_http_realip_add_variables(ngx_conf_t *cf);
+ static ngx_int_t ngx_http_realip_init(ngx_conf_t *cf);
++static ngx_http_realip_ctx_t *ngx_http_realip_get_module_ctx(
++    ngx_http_request_t *r);
+ 
+ 
+ static ngx_int_t ngx_http_realip_remote_addr_variable(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
++static ngx_int_t ngx_http_realip_remote_port_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data);
+ 
+ 
+ static ngx_command_t  ngx_http_realip_commands[] = {
+@@ -115,6 +119,9 @@ static ngx_http_variable_t  ngx_http_realip_vars[] = {
+     { ngx_string("realip_remote_addr"), NULL,
+       ngx_http_realip_remote_addr_variable, 0, 0, 0 },
+ 
++    { ngx_string("realip_remote_port"), NULL,
++      ngx_http_realip_remote_port_variable, 0, 0, 0 },
++
+     { ngx_null_string, NULL, NULL, 0, 0, 0 }
+ };
+ 
+@@ -131,6 +138,10 @@ ngx_http_realip_handler(ngx_http_request_t *r)
+     ngx_list_part_t             *part;
+     ngx_table_elt_t             *header;
+     ngx_connection_t            *c;
++    struct sockaddr_in          *sin;
++#if (NGX_HAVE_INET6)
++    struct sockaddr_in6         *sin6;
++#endif
+     ngx_http_realip_ctx_t       *ctx;
+     ngx_http_realip_loc_conf_t  *rlcf;
+ 
+@@ -230,6 +241,24 @@ found:
+                                     rlcf->recursive)
+         != NGX_DECLINED)
+     {
++        if (rlcf->type == NGX_HTTP_REALIP_PROXY) {
++
++            switch (addr.sockaddr->sa_family) {
++
++#if (NGX_HAVE_INET6)
++            case AF_INET6:
++                sin6 = (struct sockaddr_in6 *) addr.sockaddr;
++                sin6->sin6_port = htons(c->proxy_protocol_port);
++                break;
++#endif
++
++            default: /* AF_INET */
++                sin = (struct sockaddr_in *) addr.sockaddr;
++                sin->sin_port = htons(c->proxy_protocol_port);
++                break;
++            }
++        }
++
+         return ngx_http_realip_set_addr(r, &addr);
+     }
+ 
+@@ -358,6 +387,10 @@ ngx_http_realip(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     ngx_str_t  *value;
+ 
++    if (rlcf->type != NGX_CONF_UNSET_UINT) {
++        return "is duplicate";
++    }
++
+     value = cf->args->elts;
+ 
+     if (ngx_strcmp(value[1].data, "X-Real-IP") == 0) {
+@@ -475,11 +508,9 @@ ngx_http_realip_init(ngx_conf_t *cf)
+ }
+ 
+ 
+-static ngx_int_t
+-ngx_http_realip_remote_addr_variable(ngx_http_request_t *r,
+-    ngx_http_variable_value_t *v, uintptr_t data)
++static ngx_http_realip_ctx_t *
++ngx_http_realip_get_module_ctx(ngx_http_request_t *r)
+ {
+-    ngx_str_t              *addr_text;
+     ngx_pool_cleanup_t     *cln;
+     ngx_http_realip_ctx_t  *ctx;
+ 
+@@ -500,6 +531,19 @@ ngx_http_realip_remote_addr_variable(ngx_http_request_t *r,
+         }
+     }
+ 
++    return ctx;
++}
++
++
++static ngx_int_t
++ngx_http_realip_remote_addr_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data)
++{
++    ngx_str_t              *addr_text;
++    ngx_http_realip_ctx_t  *ctx;
++
++    ctx = ngx_http_realip_get_module_ctx(r);
++
+     addr_text = ctx ? &ctx->addr_text : &r->connection->addr_text;
+ 
+     v->len = addr_text->len;
+@@ -510,3 +554,52 @@ ngx_http_realip_remote_addr_variable(ngx_http_request_t *r,
+ 
+     return NGX_OK;
+ }
++
++
++static ngx_int_t
++ngx_http_realip_remote_port_variable(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data)
++{
++    ngx_uint_t              port;
++    struct sockaddr        *sa;
++    ngx_http_realip_ctx_t  *ctx;
++
++    ctx = ngx_http_realip_get_module_ctx(r);
++
++    sa = ctx ? ctx->sockaddr : r->connection->sockaddr;
++
++    v->len = 0;
++    v->valid = 1;
++    v->no_cacheable = 0;
++    v->not_found = 0;
++
++    v->data = ngx_pnalloc(r->pool, sizeof("65535") - 1);
++    if (v->data == NULL) {
++        return NGX_ERROR;
++    }
++
++    switch (sa->sa_family) {
++
++#if (NGX_HAVE_INET6)
++    case AF_INET6:
++        port = ntohs(((struct sockaddr_in6 *) sa)->sin6_port);
++        break;
++#endif
++
++#if (NGX_HAVE_UNIX_DOMAIN)
++    case AF_UNIX:
++        port = 0;
++        break;
++#endif
++
++    default: /* AF_INET */
++        port = ntohs(((struct sockaddr_in *) sa)->sin_port);
++        break;
++    }
++
++    if (port > 0 && port < 65536) {
++        v->len = ngx_sprintf(v->data, "%ui", port) - v->data;
++    }
++
++    return NGX_OK;
++}
+diff --git a/src/http/modules/ngx_http_scgi_module.c b/src/http/modules/ngx_http_scgi_module.c
+index f09617e..36656ec 100644
+--- a/src/http/modules/ngx_http_scgi_module.c
++++ b/src/http/modules/ngx_http_scgi_module.c
+@@ -136,7 +136,7 @@ static ngx_command_t ngx_http_scgi_commands[] = {
+       NULL },
+ 
+     { ngx_string("scgi_bind"),
+-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+       ngx_http_upstream_bind_set_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_scgi_loc_conf_t, upstream.local),
+diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
+index 6a4108c..7f23c86 100644
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -15,7 +15,7 @@ typedef ngx_int_t (*ngx_ssl_variable_handler_pt)(ngx_connection_t *c,
+ 
+ 
+ #define NGX_DEFAULT_CIPHERS     "HIGH:!aNULL:!MD5"
+-#define NGX_DEFAULT_ECDH_CURVE  "prime256v1"
++#define NGX_DEFAULT_ECDH_CURVE  "auto"
+ 
+ #define NGX_HTTP_NPN_ADVERTISE  "\x08http/1.1"
+ 
+@@ -81,16 +81,16 @@ static ngx_command_t  ngx_http_ssl_commands[] = {
+ 
+     { ngx_string("ssl_certificate"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_SRV_CONF_OFFSET,
+-      offsetof(ngx_http_ssl_srv_conf_t, certificate),
++      offsetof(ngx_http_ssl_srv_conf_t, certificates),
+       NULL },
+ 
+     { ngx_string("ssl_certificate_key"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_SRV_CONF_OFFSET,
+-      offsetof(ngx_http_ssl_srv_conf_t, certificate_key),
++      offsetof(ngx_http_ssl_srv_conf_t, certificate_keys),
+       NULL },
+ 
+     { ngx_string("ssl_password_file"),
+@@ -508,8 +508,6 @@ ngx_http_ssl_create_srv_conf(ngx_conf_t *cf)
+      * set by ngx_pcalloc():
+      *
+      *     sscf->protocols = 0;
+-     *     sscf->certificate = { 0, NULL };
+-     *     sscf->certificate_key = { 0, NULL };
+      *     sscf->dhparam = { 0, NULL };
+      *     sscf->ecdh_curve = { 0, NULL };
+      *     sscf->client_certificate = { 0, NULL };
+@@ -526,6 +524,8 @@ ngx_http_ssl_create_srv_conf(ngx_conf_t *cf)
+     sscf->buffer_size = NGX_CONF_UNSET_SIZE;
+     sscf->verify = NGX_CONF_UNSET_UINT;
+     sscf->verify_depth = NGX_CONF_UNSET_UINT;
++    sscf->certificates = NGX_CONF_UNSET_PTR;
++    sscf->certificate_keys = NGX_CONF_UNSET_PTR;
+     sscf->passwords = NGX_CONF_UNSET_PTR;
+     sscf->builtin_session_cache = NGX_CONF_UNSET;
+     sscf->session_timeout = NGX_CONF_UNSET;
+@@ -573,8 +573,9 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+     ngx_conf_merge_uint_value(conf->verify, prev->verify, 0);
+     ngx_conf_merge_uint_value(conf->verify_depth, prev->verify_depth, 1);
+ 
+-    ngx_conf_merge_str_value(conf->certificate, prev->certificate, "");
+-    ngx_conf_merge_str_value(conf->certificate_key, prev->certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->certificates, prev->certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->certificate_keys, prev->certificate_keys,
++                         NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->passwords, prev->passwords, NULL);
+ 
+@@ -601,7 +602,7 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     if (conf->enable) {
+ 
+-        if (conf->certificate.len == 0) {
++        if (conf->certificates == NULL) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate\" is defined for "
+                           "the \"ssl\" directive in %s:%ui",
+@@ -609,7 +610,7 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+             return NGX_CONF_ERROR;
+         }
+ 
+-        if (conf->certificate_key.len == 0) {
++        if (conf->certificate_keys == NULL) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate_key\" is defined for "
+                           "the \"ssl\" directive in %s:%ui",
+@@ -617,16 +618,31 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+             return NGX_CONF_ERROR;
+         }
+ 
++        if (conf->certificate_keys->nelts < conf->certificates->nelts) {
++            ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                          "no \"ssl_certificate_key\" is defined "
++                          "for certificate \"%V\" and "
++                          "the \"ssl\" directive in %s:%ui",
++                          ((ngx_str_t *) conf->certificates->elts)
++                          + conf->certificates->nelts - 1,
++                          conf->file, conf->line);
++            return NGX_CONF_ERROR;
++        }
++
+     } else {
+ 
+-        if (conf->certificate.len == 0) {
++        if (conf->certificates == NULL) {
+             return NGX_CONF_OK;
+         }
+ 
+-        if (conf->certificate_key.len == 0) {
++        if (conf->certificate_keys == NULL
++            || conf->certificate_keys->nelts < conf->certificates->nelts)
++        {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate_key\" is defined "
+-                          "for certificate \"%V\"", &conf->certificate);
++                          "for certificate \"%V\"",
++                          ((ngx_str_t *) conf->certificates->elts)
++                          + conf->certificates->nelts - 1);
+             return NGX_CONF_ERROR;
+         }
+     }
+@@ -666,8 +682,8 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = &conf->ssl;
+ 
+-    if (ngx_ssl_certificate(cf, &conf->ssl, &conf->certificate,
+-                            &conf->certificate_key, conf->passwords)
++    if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
++                             conf->certificate_keys, conf->passwords)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+diff --git a/src/http/modules/ngx_http_ssl_module.h b/src/http/modules/ngx_http_ssl_module.h
+index 8e69e9e..57f5941 100644
+--- a/src/http/modules/ngx_http_ssl_module.h
++++ b/src/http/modules/ngx_http_ssl_module.h
+@@ -32,8 +32,9 @@ typedef struct {
+ 
+     time_t                          session_timeout;
+ 
+-    ngx_str_t                       certificate;
+-    ngx_str_t                       certificate_key;
++    ngx_array_t                    *certificates;
++    ngx_array_t                    *certificate_keys;
++
+     ngx_str_t                       dhparam;
+     ngx_str_t                       ecdh_curve;
+     ngx_str_t                       client_certificate;
+diff --git a/src/http/modules/ngx_http_upstream_keepalive_module.c b/src/http/modules/ngx_http_upstream_keepalive_module.c
+index 85bfcdb..0048e6b 100644
+--- a/src/http/modules/ngx_http_upstream_keepalive_module.c
++++ b/src/http/modules/ngx_http_upstream_keepalive_module.c
+@@ -29,7 +29,7 @@ typedef struct {
+     ngx_connection_t                  *connection;
+ 
+     socklen_t                          socklen;
+-    u_char                             sockaddr[NGX_SOCKADDRLEN];
++    ngx_sockaddr_t                     sockaddr;
+ 
+ } ngx_http_upstream_keepalive_cache_t;
+ 
+diff --git a/src/http/modules/ngx_http_uwsgi_module.c b/src/http/modules/ngx_http_uwsgi_module.c
+index fef2c46..a03c6f6 100644
+--- a/src/http/modules/ngx_http_uwsgi_module.c
++++ b/src/http/modules/ngx_http_uwsgi_module.c
+@@ -196,7 +196,7 @@ static ngx_command_t ngx_http_uwsgi_commands[] = {
+       NULL },
+ 
+     { ngx_string("uwsgi_bind"),
+-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE1,
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_HTTP_LOC_CONF|NGX_CONF_TAKE12,
+       ngx_http_upstream_bind_set_slot,
+       NGX_HTTP_LOC_CONF_OFFSET,
+       offsetof(ngx_http_uwsgi_loc_conf_t, upstream.local),
+diff --git a/src/http/ngx_http.c b/src/http/ngx_http.c
+index 0ceb613..13d497c 100644
+--- a/src/http/ngx_http.c
++++ b/src/http/ngx_http.c
+@@ -1161,13 +1161,13 @@ ngx_http_add_listen(ngx_conf_t *cf, ngx_http_core_srv_conf_t *cscf,
+         }
+     }
+ 
+-    sa = &lsopt->u.sockaddr;
++    sa = &lsopt->sockaddr.sockaddr;
+ 
+     switch (sa->sa_family) {
+ 
+ #if (NGX_HAVE_INET6)
+     case AF_INET6:
+-        sin6 = &lsopt->u.sockaddr_in6;
++        sin6 = &lsopt->sockaddr.sockaddr_in6;
+         p = sin6->sin6_port;
+         break;
+ #endif
+@@ -1179,7 +1179,7 @@ ngx_http_add_listen(ngx_conf_t *cf, ngx_http_core_srv_conf_t *cscf,
+ #endif
+ 
+     default: /* AF_INET */
+-        sin = &lsopt->u.sockaddr_in;
++        sin = &lsopt->sockaddr.sockaddr_in;
+         p = sin->sin_port;
+         break;
+     }
+@@ -1215,14 +1215,8 @@ static ngx_int_t
+ ngx_http_add_addresses(ngx_conf_t *cf, ngx_http_core_srv_conf_t *cscf,
+     ngx_http_conf_port_t *port, ngx_http_listen_opt_t *lsopt)
+ {
+-    u_char                *p;
+-    size_t                 len, off;
+     ngx_uint_t             i, default_server, proxy_protocol;
+-    struct sockaddr       *sa;
+     ngx_http_conf_addr_t  *addr;
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-    struct sockaddr_un    *saun;
+-#endif
+ #if (NGX_HTTP_SSL)
+     ngx_uint_t             ssl;
+ #endif
+@@ -1235,37 +1229,15 @@ ngx_http_add_addresses(ngx_conf_t *cf, ngx_http_core_srv_conf_t *cscf,
+      * may fill some fields in inherited sockaddr struct's
+      */
+ 
+-    sa = &lsopt->u.sockaddr;
+-
+-    switch (sa->sa_family) {
+-
+-#if (NGX_HAVE_INET6)
+-    case AF_INET6:
+-        off = offsetof(struct sockaddr_in6, sin6_addr);
+-        len = 16;
+-        break;
+-#endif
+-
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-    case AF_UNIX:
+-        off = offsetof(struct sockaddr_un, sun_path);
+-        len = sizeof(saun->sun_path);
+-        break;
+-#endif
+-
+-    default: /* AF_INET */
+-        off = offsetof(struct sockaddr_in, sin_addr);
+-        len = 4;
+-        break;
+-    }
+-
+-    p = lsopt->u.sockaddr_data + off;
+-
+     addr = port->addrs.elts;
+ 
+     for (i = 0; i < port->addrs.nelts; i++) {
+ 
+-        if (ngx_memcmp(p, addr[i].opt.u.sockaddr_data + off, len) != 0) {
++        if (ngx_cmp_sockaddr(&lsopt->sockaddr.sockaddr, lsopt->socklen,
++                             &addr[i].opt.sockaddr.sockaddr,
++                             addr[i].opt.socklen, 0)
++            != NGX_OK)
++        {
+             continue;
+         }
+ 
+@@ -1756,7 +1728,8 @@ ngx_http_add_listening(ngx_conf_t *cf, ngx_http_conf_addr_t *addr)
+     ngx_http_core_loc_conf_t  *clcf;
+     ngx_http_core_srv_conf_t  *cscf;
+ 
+-    ls = ngx_create_listening(cf, &addr->opt.u.sockaddr, addr->opt.socklen);
++    ls = ngx_create_listening(cf, &addr->opt.sockaddr.sockaddr,
++                              addr->opt.socklen);
+     if (ls == NULL) {
+         return NULL;
+     }
+@@ -1846,7 +1819,7 @@ ngx_http_add_addrs(ngx_conf_t *cf, ngx_http_port_t *hport,
+ 
+     for (i = 0; i < hport->naddrs; i++) {
+ 
+-        sin = &addr[i].opt.u.sockaddr_in;
++        sin = &addr[i].opt.sockaddr.sockaddr_in;
+         addrs[i].addr = sin->sin_addr.s_addr;
+         addrs[i].conf.default_server = addr[i].default_server;
+ #if (NGX_HTTP_SSL)
+@@ -1911,7 +1884,7 @@ ngx_http_add_addrs6(ngx_conf_t *cf, ngx_http_port_t *hport,
+ 
+     for (i = 0; i < hport->naddrs; i++) {
+ 
+-        sin6 = &addr[i].opt.u.sockaddr_in6;
++        sin6 = &addr[i].opt.sockaddr.sockaddr_in6;
+         addrs6[i].addr6 = sin6->sin6_addr;
+         addrs6[i].conf.default_server = addr[i].default_server;
+ #if (NGX_HTTP_SSL)
+diff --git a/src/http/ngx_http_core_module.c b/src/http/ngx_http_core_module.c
+index bd36aec..76917bb 100644
+--- a/src/http/ngx_http_core_module.c
++++ b/src/http/ngx_http_core_module.c
+@@ -793,8 +793,6 @@ ngx_http_handler(ngx_http_request_t *r)
+ 
+     r->connection->log->action = NULL;
+ 
+-    r->connection->unexpected_eof = 0;
+-
+     if (!r->internal) {
+         switch (r->headers_in.connection_type) {
+         case 0:
+@@ -2912,7 +2910,9 @@ ngx_http_get_forwarded_addr_internal(ngx_http_request_t *r, ngx_addr_t *addr,
+             }
+         }
+ 
+-        if (ngx_parse_addr(r->pool, &paddr, p, xfflen - (p - xff)) != NGX_OK) {
++        if (ngx_parse_addr_port(r->pool, &paddr, p, xfflen - (p - xff))
++            != NGX_OK)
++        {
+             return NGX_DECLINED;
+         }
+ 
+@@ -3032,7 +3032,7 @@ ngx_http_core_server(ngx_conf_t *cf, ngx_command_t *cmd, void *dummy)
+     if (rv == NGX_CONF_OK && !cscf->listen) {
+         ngx_memzero(&lsopt, sizeof(ngx_http_listen_opt_t));
+ 
+-        sin = &lsopt.u.sockaddr_in;
++        sin = &lsopt.sockaddr.sockaddr_in;
+ 
+         sin->sin_family = AF_INET;
+ #if (NGX_WIN32)
+@@ -3055,8 +3055,8 @@ ngx_http_core_server(ngx_conf_t *cf, ngx_command_t *cmd, void *dummy)
+ #endif
+         lsopt.wildcard = 1;
+ 
+-        (void) ngx_sock_ntop(&lsopt.u.sockaddr, lsopt.socklen, lsopt.addr,
+-                             NGX_SOCKADDR_STRLEN, 1);
++        (void) ngx_sock_ntop(&lsopt.sockaddr.sockaddr, lsopt.socklen,
++                             lsopt.addr, NGX_SOCKADDR_STRLEN, 1);
+ 
+         if (ngx_http_add_listen(cf, cscf, &lsopt) != NGX_OK) {
+             return NGX_CONF_ERROR;
+@@ -4000,7 +4000,7 @@ ngx_http_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     ngx_memzero(&lsopt, sizeof(ngx_http_listen_opt_t));
+ 
+-    ngx_memcpy(&lsopt.u.sockaddr, u.sockaddr, u.socklen);
++    ngx_memcpy(&lsopt.sockaddr.sockaddr, &u.sockaddr, u.socklen);
+ 
+     lsopt.socklen = u.socklen;
+     lsopt.backlog = NGX_LISTEN_BACKLOG;
+@@ -4017,7 +4017,7 @@ ngx_http_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+     lsopt.ipv6only = 1;
+ #endif
+ 
+-    (void) ngx_sock_ntop(&lsopt.u.sockaddr, lsopt.socklen, lsopt.addr,
++    (void) ngx_sock_ntop(&lsopt.sockaddr.sockaddr, lsopt.socklen, lsopt.addr,
+                          NGX_SOCKADDR_STRLEN, 1);
+ 
+     for (n = 2; n < cf->args->nelts; n++) {
+@@ -4146,7 +4146,7 @@ ngx_http_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ #if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
+             struct sockaddr  *sa;
+ 
+-            sa = &lsopt.u.sockaddr;
++            sa = &lsopt.sockaddr.sockaddr;
+ 
+             if (sa->sa_family == AF_INET6) {
+ 
+diff --git a/src/http/ngx_http_core_module.h b/src/http/ngx_http_core_module.h
+index 6c446a0..773c215 100644
+--- a/src/http/ngx_http_core_module.h
++++ b/src/http/ngx_http_core_module.h
+@@ -58,18 +58,7 @@ typedef struct ngx_http_core_loc_conf_s  ngx_http_core_loc_conf_t;
+ 
+ 
+ typedef struct {
+-    union {
+-        struct sockaddr        sockaddr;
+-        struct sockaddr_in     sockaddr_in;
+-#if (NGX_HAVE_INET6)
+-        struct sockaddr_in6    sockaddr_in6;
+-#endif
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-        struct sockaddr_un     sockaddr_un;
+-#endif
+-        u_char                 sockaddr_data[NGX_SOCKADDRLEN];
+-    } u;
+-
++    ngx_sockaddr_t             sockaddr;
+     socklen_t                  socklen;
+ 
+     unsigned                   set:1;
+diff --git a/src/http/ngx_http_file_cache.c b/src/http/ngx_http_file_cache.c
+index 37cd377..38b695e 100644
+--- a/src/http/ngx_http_file_cache.c
++++ b/src/http/ngx_http_file_cache.c
+@@ -1403,6 +1403,7 @@ ngx_http_file_cache_update(ngx_http_request_t *r, ngx_temp_file_t *tf)
+     ngx_shmtx_lock(&cache->shpool->mutex);
+ 
+     c->node->count--;
++    c->node->error = 0;
+     c->node->uniq = uniq;
+     c->node->body_start = c->body_start;
+ 
+diff --git a/src/http/ngx_http_header_filter_module.c b/src/http/ngx_http_header_filter_module.c
+index 507dc93..2cf1205 100644
+--- a/src/http/ngx_http_header_filter_module.c
++++ b/src/http/ngx_http_header_filter_module.c
+@@ -95,17 +95,17 @@ static ngx_str_t ngx_http_status_lines[] = {
+     ngx_string("414 Request-URI Too Large"),
+     ngx_string("415 Unsupported Media Type"),
+     ngx_string("416 Requested Range Not Satisfiable"),
++    ngx_null_string,  /* "417 Expectation Failed" */
++    ngx_null_string,  /* "418 unused" */
++    ngx_null_string,  /* "419 unused" */
++    ngx_null_string,  /* "420 unused" */
++    ngx_string("421 Misdirected Request"),
+ 
+-    /* ngx_null_string, */  /* "417 Expectation Failed" */
+-    /* ngx_null_string, */  /* "418 unused" */
+-    /* ngx_null_string, */  /* "419 unused" */
+-    /* ngx_null_string, */  /* "420 unused" */
+-    /* ngx_null_string, */  /* "421 unused" */
+     /* ngx_null_string, */  /* "422 Unprocessable Entity" */
+     /* ngx_null_string, */  /* "423 Locked" */
+     /* ngx_null_string, */  /* "424 Failed Dependency" */
+ 
+-#define NGX_HTTP_LAST_4XX  417
++#define NGX_HTTP_LAST_4XX  422
+ #define NGX_HTTP_OFF_5XX   (NGX_HTTP_LAST_4XX - 400 + NGX_HTTP_OFF_4XX)
+ 
+     ngx_string("500 Internal Server Error"),
+@@ -113,10 +113,10 @@ static ngx_str_t ngx_http_status_lines[] = {
+     ngx_string("502 Bad Gateway"),
+     ngx_string("503 Service Temporarily Unavailable"),
+     ngx_string("504 Gateway Time-out"),
+-
+     ngx_null_string,        /* "505 HTTP Version Not Supported" */
+     ngx_null_string,        /* "506 Variant Also Negotiates" */
+     ngx_string("507 Insufficient Storage"),
++
+     /* ngx_null_string, */  /* "508 unused" */
+     /* ngx_null_string, */  /* "509 unused" */
+     /* ngx_null_string, */  /* "510 Not Extended" */
+diff --git a/src/http/ngx_http_parse.c b/src/http/ngx_http_parse.c
+index 0e0b3a2..59aa1fe 100644
+--- a/src/http/ngx_http_parse.c
++++ b/src/http/ngx_http_parse.c
+@@ -737,6 +737,10 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
+                 return NGX_HTTP_PARSE_INVALID_REQUEST;
+             }
+ 
++            if (r->http_major > 99) {
++                return NGX_HTTP_PARSE_INVALID_REQUEST;
++            }
++
+             r->http_major = r->http_major * 10 + ch - '0';
+             break;
+ 
+@@ -770,6 +774,10 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
+                 return NGX_HTTP_PARSE_INVALID_REQUEST;
+             }
+ 
++            if (r->http_minor > 99) {
++                return NGX_HTTP_PARSE_INVALID_REQUEST;
++            }
++
+             r->http_minor = r->http_minor * 10 + ch - '0';
+             break;
+ 
+@@ -1680,6 +1688,10 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
+                 return NGX_ERROR;
+             }
+ 
++            if (r->http_major > 99) {
++                return NGX_ERROR;
++            }
++
+             r->http_major = r->http_major * 10 + ch - '0';
+             break;
+ 
+@@ -1704,6 +1716,10 @@ ngx_http_parse_status_line(ngx_http_request_t *r, ngx_buf_t *b,
+                 return NGX_ERROR;
+             }
+ 
++            if (r->http_minor > 99) {
++                return NGX_ERROR;
++            }
++
+             r->http_minor = r->http_minor * 10 + ch - '0';
+             break;
+ 
+diff --git a/src/http/ngx_http_request.c b/src/http/ngx_http_request.c
+index 7d6cada..31e3539 100644
+--- a/src/http/ngx_http_request.c
++++ b/src/http/ngx_http_request.c
+@@ -110,6 +110,10 @@ ngx_http_header_t  ngx_http_headers_in[] = {
+                  offsetof(ngx_http_headers_in_t, content_length),
+                  ngx_http_process_unique_header_line },
+ 
++    { ngx_string("Content-Range"),
++                 offsetof(ngx_http_headers_in_t, content_range),
++                 ngx_http_process_unique_header_line },
++
+     { ngx_string("Content-Type"),
+                  offsetof(ngx_http_headers_in_t, content_type),
+                  ngx_http_process_header_line },
+@@ -2065,7 +2069,7 @@ ngx_http_set_virtual_server(ngx_http_request_t *r, ngx_str_t *host)
+             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
+                           "client attempted to request the server name "
+                           "different from that one was negotiated");
+-            ngx_http_finalize_request(r, NGX_HTTP_BAD_REQUEST);
++            ngx_http_finalize_request(r, NGX_HTTP_MISDIRECTED_REQUEST);
+             return NGX_ERROR;
+         }
+     }
+@@ -2752,9 +2756,13 @@ ngx_http_test_reading(ngx_http_request_t *r)
+ 
+ #if (NGX_HAVE_EPOLLRDHUP)
+ 
+-    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && rev->pending_eof) {
++    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && ngx_use_epoll_rdhup) {
+         socklen_t  len;
+ 
++        if (!rev->pending_eof) {
++            return;
++        }
++
+         rev->eof = 1;
+         c->error = 1;
+ 
+diff --git a/src/http/ngx_http_request.h b/src/http/ngx_http_request.h
+index cfde7dc..499c1ef 100644
+--- a/src/http/ngx_http_request.h
++++ b/src/http/ngx_http_request.h
+@@ -95,6 +95,7 @@
+ #define NGX_HTTP_REQUEST_URI_TOO_LARGE     414
+ #define NGX_HTTP_UNSUPPORTED_MEDIA_TYPE    415
+ #define NGX_HTTP_RANGE_NOT_SATISFIABLE     416
++#define NGX_HTTP_MISDIRECTED_REQUEST       421
+ 
+ 
+ /* Our own HTTP codes */
+@@ -182,6 +183,7 @@ typedef struct {
+     ngx_table_elt_t                  *user_agent;
+     ngx_table_elt_t                  *referer;
+     ngx_table_elt_t                  *content_length;
++    ngx_table_elt_t                  *content_range;
+     ngx_table_elt_t                  *content_type;
+ 
+     ngx_table_elt_t                  *range;
+diff --git a/src/http/ngx_http_special_response.c b/src/http/ngx_http_special_response.c
+index 2771e58..64e5acd 100644
+--- a/src/http/ngx_http_special_response.c
++++ b/src/http/ngx_http_special_response.c
+@@ -210,6 +210,14 @@ static char ngx_http_error_416_page[] =
+ ;
+ 
+ 
++static char ngx_http_error_421_page[] =
++"<html>" CRLF
++"<head><title>421 Misdirected Request</title></head>" CRLF
++"<body bgcolor=\"white\">" CRLF
++"<center><h1>421 Misdirected Request</h1></center>" CRLF
++;
++
++
+ static char ngx_http_error_494_page[] =
+ "<html>" CRLF
+ "<head><title>400 Request Header Or Cookie Too Large</title></head>"
+@@ -334,8 +342,13 @@ static ngx_str_t ngx_http_error_pages[] = {
+     ngx_string(ngx_http_error_414_page),
+     ngx_string(ngx_http_error_415_page),
+     ngx_string(ngx_http_error_416_page),
++    ngx_null_string,                     /* 417 */
++    ngx_null_string,                     /* 418 */
++    ngx_null_string,                     /* 419 */
++    ngx_null_string,                     /* 420 */
++    ngx_string(ngx_http_error_421_page),
+ 
+-#define NGX_HTTP_LAST_4XX  417
++#define NGX_HTTP_LAST_4XX  422
+ #define NGX_HTTP_OFF_5XX   (NGX_HTTP_LAST_4XX - 400 + NGX_HTTP_OFF_4XX)
+ 
+     ngx_string(ngx_http_error_494_page), /* 494, request header too large */
+diff --git a/src/http/ngx_http_upstream.c b/src/http/ngx_http_upstream.c
+index 1386bdb..89b2160 100644
+--- a/src/http/ngx_http_upstream.c
++++ b/src/http/ngx_http_upstream.c
+@@ -165,8 +165,8 @@ static char *ngx_http_upstream(ngx_conf_t *cf, ngx_command_t *cmd, void *dummy);
+ static char *ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd,
+     void *conf);
+ 
+-static ngx_addr_t *ngx_http_upstream_get_local(ngx_http_request_t *r,
+-    ngx_http_upstream_local_t *local);
++static ngx_int_t ngx_http_upstream_set_local(ngx_http_request_t *r,
++  ngx_http_upstream_t *u, ngx_http_upstream_local_t *local);
+ 
+ static void *ngx_http_upstream_create_main_conf(ngx_conf_t *cf);
+ static char *ngx_http_upstream_init_main_conf(ngx_conf_t *cf, void *conf);
+@@ -588,7 +588,10 @@ ngx_http_upstream_init_request(ngx_http_request_t *r)
+         return;
+     }
+ 
+-    u->peer.local = ngx_http_upstream_get_local(r, u->conf->local);
++    if (ngx_http_upstream_set_local(r, u, u->conf->local) != NGX_OK) {
++        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
++        return;
++    }
+ 
+     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+ 
+@@ -1219,9 +1222,13 @@ ngx_http_upstream_check_broken_connection(ngx_http_request_t *r,
+ 
+ #if (NGX_HAVE_EPOLLRDHUP)
+ 
+-    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && ev->pending_eof) {
++    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && ngx_use_epoll_rdhup) {
+         socklen_t  len;
+ 
++        if (!ev->pending_eof) {
++            return;
++        }
++
+         ev->eof = 1;
+         c->error = 1;
+ 
+@@ -5785,7 +5792,7 @@ ngx_http_upstream_bind_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
+ 
+     value = cf->args->elts;
+ 
+-    if (ngx_strcmp(value[1].data, "off") == 0) {
++    if (cf->args->nelts == 2 && ngx_strcmp(value[1].data, "off") == 0) {
+         *plocal = NULL;
+         return NGX_CONF_OK;
+     }
+@@ -5815,34 +5822,51 @@ ngx_http_upstream_bind_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
+ 
+         *local->value = cv;
+ 
+-        return NGX_CONF_OK;
+-    }
++    } else {
++        local->addr = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
++        if (local->addr == NULL) {
++            return NGX_CONF_ERROR;
++        }
+ 
+-    local->addr = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
+-    if (local->addr == NULL) {
+-        return NGX_CONF_ERROR;
+-    }
++        rc = ngx_parse_addr(cf->pool, local->addr, value[1].data, value[1].len);
+ 
+-    rc = ngx_parse_addr(cf->pool, local->addr, value[1].data, value[1].len);
++        switch (rc) {
++        case NGX_OK:
++            local->addr->name = value[1];
++            break;
+ 
+-    switch (rc) {
+-    case NGX_OK:
+-        local->addr->name = value[1];
+-        return NGX_CONF_OK;
++        case NGX_DECLINED:
++            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                               "invalid address \"%V\"", &value[1]);
++            /* fall through */
+ 
+-    case NGX_DECLINED:
+-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+-                           "invalid address \"%V\"", &value[1]);
+-        /* fall through */
++        default:
++            return NGX_CONF_ERROR;
++        }
++    }
+ 
+-    default:
+-        return NGX_CONF_ERROR;
++    if (cf->args->nelts > 2) {
++        if (ngx_strcmp(value[2].data, "transparent") == 0) {
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++            local->transparent = 1;
++#else
++            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                               "transparent proxying is not supported "
++                               "on this platform, ignored");
++#endif
++        } else {
++            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                               "invalid parameter \"%V\"", &value[2]);
++            return NGX_CONF_ERROR;
++        }
+     }
++
++    return NGX_CONF_OK;
+ }
+ 
+ 
+-static ngx_addr_t *
+-ngx_http_upstream_get_local(ngx_http_request_t *r,
++static ngx_int_t
++ngx_http_upstream_set_local(ngx_http_request_t *r, ngx_http_upstream_t *u,
+     ngx_http_upstream_local_t *local)
+ {
+     ngx_int_t    rc;
+@@ -5850,41 +5874,47 @@ ngx_http_upstream_get_local(ngx_http_request_t *r,
+     ngx_addr_t  *addr;
+ 
+     if (local == NULL) {
+-        return NULL;
++        u->peer.local = NULL;
++        return NGX_OK;
+     }
+ 
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++    u->peer.transparent = local->transparent;
++#endif
++
+     if (local->value == NULL) {
+-        return local->addr;
++        u->peer.local = local->addr;
++        return NGX_OK;
+     }
+ 
+     if (ngx_http_complex_value(r, local->value, &val) != NGX_OK) {
+-        return NULL;
++        return NGX_ERROR;
+     }
+ 
+     if (val.len == 0) {
+-        return NULL;
++        return NGX_OK;
+     }
+ 
+     addr = ngx_palloc(r->pool, sizeof(ngx_addr_t));
+     if (addr == NULL) {
+-        return NULL;
++        return NGX_ERROR;
+     }
+ 
+     rc = ngx_parse_addr(r->pool, addr, val.data, val.len);
++    if (rc == NGX_ERROR) {
++        return NGX_ERROR;
++    }
+ 
+-    switch (rc) {
+-    case NGX_OK:
+-        addr->name = val;
+-        return addr;
+-
+-    case NGX_DECLINED:
++    if (rc != NGX_OK) {
+         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+                       "invalid local address \"%V\"", &val);
+-        /* fall through */
+-
+-    default:
+-        return NULL;
++        return NGX_OK;
+     }
++
++    addr->name = val;
++    u->peer.local = addr;
++
++    return NGX_OK;
+ }
+ 
+ 
+diff --git a/src/http/ngx_http_upstream.h b/src/http/ngx_http_upstream.h
+index 7595dcf..b288f28 100644
+--- a/src/http/ngx_http_upstream.h
++++ b/src/http/ngx_http_upstream.h
+@@ -133,6 +133,9 @@ struct ngx_http_upstream_srv_conf_s {
+ typedef struct {
+     ngx_addr_t                      *addr;
+     ngx_http_complex_value_t        *value;
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++    ngx_uint_t                       transparent; /* unsigned  transparent:1; */
++#endif
+ } ngx_http_upstream_local_t;
+ 
+ 
+diff --git a/src/http/ngx_http_variables.c b/src/http/ngx_http_variables.c
+index f8271ab..d310d32 100644
+--- a/src/http/ngx_http_variables.c
++++ b/src/http/ngx_http_variables.c
+@@ -58,6 +58,8 @@ static ngx_int_t ngx_http_variable_remote_port(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
+ static ngx_int_t ngx_http_variable_proxy_protocol_addr(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
++static ngx_int_t ngx_http_variable_proxy_protocol_port(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data);
+ static ngx_int_t ngx_http_variable_server_addr(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
+ static ngx_int_t ngx_http_variable_server_port(ngx_http_request_t *r,
+@@ -98,6 +100,8 @@ static ngx_int_t ngx_http_variable_request_length(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
+ static ngx_int_t ngx_http_variable_request_time(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
++static ngx_int_t ngx_http_variable_request_id(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data);
+ static ngx_int_t ngx_http_variable_status(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data);
+ 
+@@ -192,6 +196,9 @@ static ngx_http_variable_t  ngx_http_core_variables[] = {
+     { ngx_string("proxy_protocol_addr"), NULL,
+       ngx_http_variable_proxy_protocol_addr, 0, 0, 0 },
+ 
++    { ngx_string("proxy_protocol_port"), NULL,
++      ngx_http_variable_proxy_protocol_port, 0, 0, 0 },
++
+     { ngx_string("server_addr"), NULL, ngx_http_variable_server_addr, 0, 0, 0 },
+ 
+     { ngx_string("server_port"), NULL, ngx_http_variable_server_port, 0, 0, 0 },
+@@ -274,6 +281,10 @@ static ngx_http_variable_t  ngx_http_core_variables[] = {
+     { ngx_string("request_time"), NULL, ngx_http_variable_request_time,
+       0, NGX_HTTP_VAR_NOCACHEABLE, 0 },
+ 
++    { ngx_string("request_id"), NULL,
++      ngx_http_variable_request_id,
++      0, 0, 0 },
++
+     { ngx_string("status"), NULL,
+       ngx_http_variable_status, 0,
+       NGX_HTTP_VAR_NOCACHEABLE, 0 },
+@@ -1250,6 +1261,32 @@ ngx_http_variable_proxy_protocol_addr(ngx_http_request_t *r,
+ 
+ 
+ static ngx_int_t
++ngx_http_variable_proxy_protocol_port(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data)
++{
++    ngx_uint_t  port;
++
++    v->len = 0;
++    v->valid = 1;
++    v->no_cacheable = 0;
++    v->not_found = 0;
++
++    v->data = ngx_pnalloc(r->pool, sizeof("65535") - 1);
++    if (v->data == NULL) {
++        return NGX_ERROR;
++    }
++
++    port = r->connection->proxy_protocol_port;
++
++    if (port > 0 && port < 65536) {
++        v->len = ngx_sprintf(v->data, "%ui", port) - v->data;
++    }
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t
+ ngx_http_variable_server_addr(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data)
+ {
+@@ -2068,6 +2105,47 @@ ngx_http_variable_request_time(ngx_http_request_t *r,
+ 
+ 
+ static ngx_int_t
++ngx_http_variable_request_id(ngx_http_request_t *r,
++    ngx_http_variable_value_t *v, uintptr_t data)
++{
++    u_char  *id;
++
++#if (NGX_OPENSSL)
++    u_char   random_bytes[16];
++#endif
++
++    id = ngx_pnalloc(r->pool, 32);
++    if (id == NULL) {
++        return NGX_ERROR;
++    }
++
++    v->valid = 1;
++    v->no_cacheable = 0;
++    v->not_found = 0;
++
++    v->len = 32;
++    v->data = id;
++
++#if (NGX_OPENSSL)
++
++    if (RAND_bytes(random_bytes, 16) == 1) {
++        ngx_hex_dump(id, random_bytes, 16);
++        return NGX_OK;
++    }
++
++    ngx_ssl_error(NGX_LOG_ERR, r->connection->log, 0, "RAND_bytes() failed");
++
++#endif
++
++    ngx_sprintf(id, "%08xD%08xD%08xD%08xD",
++                (uint32_t) ngx_random(), (uint32_t) ngx_random(),
++                (uint32_t) ngx_random(), (uint32_t) ngx_random());
++
++    return NGX_OK;
++}
++
++
++static ngx_int_t
+ ngx_http_variable_connection(ngx_http_request_t *r,
+     ngx_http_variable_value_t *v, uintptr_t data)
+ {
+diff --git a/src/http/v2/ngx_http_v2.c b/src/http/v2/ngx_http_v2.c
+index 278c9ab..cd0243c 100644
+--- a/src/http/v2/ngx_http_v2.c
++++ b/src/http/v2/ngx_http_v2.c
+@@ -48,11 +48,6 @@
+ 
+ #define NGX_HTTP_V2_DEFAULT_FRAME_SIZE           (1 << 14)
+ 
+-#define NGX_HTTP_V2_MAX_WINDOW                   ((1U << 31) - 1)
+-#define NGX_HTTP_V2_DEFAULT_WINDOW               65535
+-
+-#define NGX_HTTP_V2_INITIAL_WINDOW               0
+-
+ #define NGX_HTTP_V2_ROOT                         (void *) -1
+ 
+ 
+@@ -879,8 +874,6 @@ ngx_http_v2_state_data(ngx_http_v2_connection_t *h2c, u_char *pos, u_char *end)
+         return ngx_http_v2_state_skip_padded(h2c, pos, end);
+     }
+ 
+-    stream->in_closed = h2c->state.flags & NGX_HTTP_V2_END_STREAM_FLAG;
+-
+     h2c->state.stream = stream;
+ 
+     return ngx_http_v2_state_read_data(h2c, pos, end);
+@@ -891,10 +884,12 @@ static u_char *
+ ngx_http_v2_state_read_data(ngx_http_v2_connection_t *h2c, u_char *pos,
+     u_char *end)
+ {
+-    size_t                 size;
+-    ngx_int_t              rc;
+-    ngx_uint_t             last;
+-    ngx_http_v2_stream_t  *stream;
++    size_t                   size;
++    ngx_buf_t               *buf;
++    ngx_int_t                rc;
++    ngx_http_request_t      *r;
++    ngx_http_v2_stream_t    *stream;
++    ngx_http_v2_srv_conf_t  *h2scf;
+ 
+     stream = h2c->state.stream;
+ 
+@@ -913,17 +908,42 @@ ngx_http_v2_state_read_data(ngx_http_v2_connection_t *h2c, u_char *pos,
+ 
+     if (size >= h2c->state.length) {
+         size = h2c->state.length;
+-        last = stream->in_closed;
+-
+-    } else {
+-        last = 0;
++        stream->in_closed  = h2c->state.flags & NGX_HTTP_V2_END_STREAM_FLAG;
+     }
+ 
+-    rc = ngx_http_v2_process_request_body(stream->request, pos, size, last);
++    r = stream->request;
+ 
+-    if (rc != NGX_OK) {
+-        stream->skip_data = 1;
+-        ngx_http_finalize_request(stream->request, rc);
++    if (r->request_body) {
++        rc = ngx_http_v2_process_request_body(r, pos, size, stream->in_closed);
++
++        if (rc != NGX_OK) {
++            stream->skip_data = 1;
++            ngx_http_finalize_request(r, rc);
++        }
++
++    } else if (size) {
++        buf = stream->preread;
++
++        if (buf == NULL) {
++            h2scf = ngx_http_get_module_srv_conf(r, ngx_http_v2_module);
++
++            buf = ngx_create_temp_buf(r->pool, h2scf->preread_size);
++            if (buf == NULL) {
++                return ngx_http_v2_connection_error(h2c,
++                                                    NGX_HTTP_V2_INTERNAL_ERROR);
++            }
++
++            stream->preread = buf;
++        }
++
++        if (size > (size_t) (buf->end - buf->last)) {
++            ngx_log_error(NGX_LOG_ALERT, h2c->connection->log, 0,
++                          "http2 preread buffer overflow");
++            return ngx_http_v2_connection_error(h2c,
++                                                NGX_HTTP_V2_INTERNAL_ERROR);
++        }
++
++        buf->last = ngx_cpymem(buf->last, pos, size);
+     }
+ 
+     pos += size;
+@@ -1058,7 +1078,9 @@ ngx_http_v2_state_headers(ngx_http_v2_connection_t *h2c, u_char *pos,
+         goto rst_stream;
+     }
+ 
+-    if (!h2c->settings_ack && !(h2c->state.flags & NGX_HTTP_V2_END_STREAM_FLAG))
++    if (!h2c->settings_ack
++        && !(h2c->state.flags & NGX_HTTP_V2_END_STREAM_FLAG)
++        && h2scf->preread_size < NGX_HTTP_V2_DEFAULT_WINDOW)
+     {
+         ngx_log_error(NGX_LOG_INFO, h2c->connection->log, 0,
+                       "client sent stream with data "
+@@ -2434,8 +2456,7 @@ ngx_http_v2_send_settings(ngx_http_v2_connection_t *h2c, ngx_uint_t ack)
+ 
+         buf->last = ngx_http_v2_write_uint16(buf->last,
+                                          NGX_HTTP_V2_INIT_WINDOW_SIZE_SETTING);
+-        buf->last = ngx_http_v2_write_uint32(buf->last,
+-                                             NGX_HTTP_V2_INITIAL_WINDOW);
++        buf->last = ngx_http_v2_write_uint32(buf->last, h2scf->preread_size);
+ 
+         buf->last = ngx_http_v2_write_uint16(buf->last,
+                                            NGX_HTTP_V2_MAX_FRAME_SIZE_SETTING);
+@@ -2643,6 +2664,7 @@ ngx_http_v2_create_stream(ngx_http_v2_connection_t *h2c)
+     ngx_http_log_ctx_t        *ctx;
+     ngx_http_request_t        *r;
+     ngx_http_v2_stream_t      *stream;
++    ngx_http_v2_srv_conf_t    *h2scf;
+     ngx_http_core_srv_conf_t  *cscf;
+ 
+     fc = h2c->free_fake_connections;
+@@ -2756,8 +2778,10 @@ ngx_http_v2_create_stream(ngx_http_v2_connection_t *h2c)
+     stream->request = r;
+     stream->connection = h2c;
+ 
++    h2scf = ngx_http_get_module_srv_conf(r, ngx_http_v2_module);
++
+     stream->send_window = h2c->init_window;
+-    stream->recv_window = NGX_HTTP_V2_INITIAL_WINDOW;
++    stream->recv_window = h2scf->preread_size;
+ 
+     h2c->processing++;
+ 
+@@ -3411,7 +3435,11 @@ ngx_http_v2_read_request_body(ngx_http_request_t *r,
+     ngx_http_client_body_handler_pt post_handler)
+ {
+     off_t                      len;
++    size_t                     size;
++    ngx_buf_t                 *buf;
++    ngx_int_t                  rc;
+     ngx_http_v2_stream_t      *stream;
++    ngx_http_v2_srv_conf_t    *h2scf;
+     ngx_http_request_body_t   *rb;
+     ngx_http_core_loc_conf_t  *clcf;
+     ngx_http_v2_connection_t  *h2c;
+@@ -3444,24 +3472,34 @@ ngx_http_v2_read_request_body(ngx_http_request_t *r,
+ 
+     r->request_body = rb;
+ 
++    h2scf = ngx_http_get_module_srv_conf(r, ngx_http_v2_module);
+     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
+ 
+     len = r->headers_in.content_length_n;
+ 
+     if (r->request_body_no_buffering && !stream->in_closed) {
+-        r->request_body_in_file_only = 0;
+ 
+         if (len < 0 || len > (off_t) clcf->client_body_buffer_size) {
+             len = clcf->client_body_buffer_size;
+         }
+ 
++        /*
++         * We need a room to store data up to the stream's initial window size,
++         * at least until this window will be exhausted.
++         */
++
++        if (len < (off_t) h2scf->preread_size) {
++            len = h2scf->preread_size;
++        }
++
+         if (len > NGX_HTTP_V2_MAX_WINDOW) {
+             len = NGX_HTTP_V2_MAX_WINDOW;
+         }
+-    }
+ 
+-    if (len >= 0 && len <= (off_t) clcf->client_body_buffer_size
+-        && !r->request_body_in_file_only)
++        rb->buf = ngx_create_temp_buf(r->pool, (size_t) len);
++
++    } else if (len >= 0 && len <= (off_t) clcf->client_body_buffer_size
++               && !r->request_body_in_file_only)
+     {
+         rb->buf = ngx_create_temp_buf(r->pool, (size_t) len);
+ 
+@@ -3478,22 +3516,44 @@ ngx_http_v2_read_request_body(ngx_http_request_t *r,
+         return NGX_HTTP_INTERNAL_SERVER_ERROR;
+     }
+ 
++    buf = stream->preread;
++
+     if (stream->in_closed) {
+         r->request_body_no_buffering = 0;
++
++        if (buf) {
++            rc = ngx_http_v2_process_request_body(r, buf->pos,
++                                                  buf->last - buf->pos, 1);
++            ngx_pfree(r->pool, buf->start);
++            return rc;
++        }
++
+         return ngx_http_v2_process_request_body(r, NULL, 0, 1);
+     }
+ 
+-    if (len) {
+-        if (r->request_body_no_buffering) {
+-            stream->recv_window = (size_t) len;
++    if (buf) {
++        rc = ngx_http_v2_process_request_body(r, buf->pos,
++                                              buf->last - buf->pos, 0);
+ 
+-        } else {
+-            stream->no_flow_control = 1;
+-            stream->recv_window = NGX_HTTP_V2_MAX_WINDOW;
++        ngx_pfree(r->pool, buf->start);
++
++        if (rc != NGX_OK) {
++            stream->skip_data = 1;
++            return rc;
+         }
++    }
+ 
+-        if (ngx_http_v2_send_window_update(stream->connection, stream->node->id,
+-                                           stream->recv_window)
++    if (r->request_body_no_buffering) {
++        size = len - h2scf->preread_size;
++
++    } else {
++        stream->no_flow_control = 1;
++        size = NGX_HTTP_V2_MAX_WINDOW - stream->recv_window;
++    }
++
++    if (size) {
++        if (ngx_http_v2_send_window_update(stream->connection,
++                                           stream->node->id, size)
+             == NGX_ERROR)
+         {
+             stream->skip_data = 1;
+@@ -3508,9 +3568,13 @@ ngx_http_v2_read_request_body(ngx_http_request_t *r,
+                 return NGX_HTTP_INTERNAL_SERVER_ERROR;
+             }
+         }
++
++        stream->recv_window += size;
+     }
+ 
+-    ngx_add_timer(r->connection->read, clcf->client_body_timeout);
++    if (!buf) {
++        ngx_add_timer(r->connection->read, clcf->client_body_timeout);
++    }
+ 
+     r->read_event_handler = ngx_http_v2_read_client_request_body_handler;
+     r->write_event_handler = ngx_http_request_empty_handler;
+@@ -3529,13 +3593,8 @@ ngx_http_v2_process_request_body(ngx_http_request_t *r, u_char *pos,
+     ngx_http_request_body_t   *rb;
+     ngx_http_core_loc_conf_t  *clcf;
+ 
+-    rb = r->request_body;
+-
+-    if (rb == NULL) {
+-        return NGX_OK;
+-    }
+-
+     fc = r->connection;
++    rb = r->request_body;
+     buf = rb->buf;
+ 
+     if (size) {
+@@ -3789,7 +3848,14 @@ ngx_http_v2_read_unbuffered_request_body(ngx_http_request_t *r)
+         window -= h2c->state.length;
+     }
+ 
+-    if (window == stream->recv_window) {
++    if (window <= stream->recv_window) {
++        if (window < stream->recv_window) {
++            ngx_log_error(NGX_LOG_ALERT, r->connection->log, 0,
++                          "http2 negative window update");
++            stream->skip_data = 1;
++            return NGX_HTTP_INTERNAL_SERVER_ERROR;
++        }
++
+         return NGX_AGAIN;
+     }
+ 
+diff --git a/src/http/v2/ngx_http_v2.h b/src/http/v2/ngx_http_v2.h
+index 1adf8de..9e738aa 100644
+--- a/src/http/v2/ngx_http_v2.h
++++ b/src/http/v2/ngx_http_v2.h
+@@ -46,6 +46,9 @@
+ #define NGX_HTTP_V2_PADDED_FLAG          0x08
+ #define NGX_HTTP_V2_PRIORITY_FLAG        0x20
+ 
++#define NGX_HTTP_V2_MAX_WINDOW           ((1U << 31) - 1)
++#define NGX_HTTP_V2_DEFAULT_WINDOW       65535
++
+ 
+ typedef struct ngx_http_v2_connection_s   ngx_http_v2_connection_t;
+ typedef struct ngx_http_v2_node_s         ngx_http_v2_node_t;
+@@ -174,6 +177,8 @@ struct ngx_http_v2_stream_s {
+     ssize_t                          send_window;
+     size_t                           recv_window;
+ 
++    ngx_buf_t                       *preread;
++
+     ngx_http_v2_out_frame_t         *free_frames;
+     ngx_chain_t                     *free_frame_headers;
+     ngx_chain_t                     *free_bufs;
+diff --git a/src/http/v2/ngx_http_v2_module.c b/src/http/v2/ngx_http_v2_module.c
+index 5a4561c..b7d99e0 100644
+--- a/src/http/v2/ngx_http_v2_module.c
++++ b/src/http/v2/ngx_http_v2_module.c
+@@ -30,6 +30,7 @@ static char *ngx_http_v2_merge_loc_conf(ngx_conf_t *cf, void *parent,
+ static char *ngx_http_v2_recv_buffer_size(ngx_conf_t *cf, void *post,
+     void *data);
+ static char *ngx_http_v2_pool_size(ngx_conf_t *cf, void *post, void *data);
++static char *ngx_http_v2_preread_size(ngx_conf_t *cf, void *post, void *data);
+ static char *ngx_http_v2_streams_index_mask(ngx_conf_t *cf, void *post,
+     void *data);
+ static char *ngx_http_v2_chunk_size(ngx_conf_t *cf, void *post, void *data);
+@@ -41,6 +42,8 @@ static ngx_conf_post_t  ngx_http_v2_recv_buffer_size_post =
+     { ngx_http_v2_recv_buffer_size };
+ static ngx_conf_post_t  ngx_http_v2_pool_size_post =
+     { ngx_http_v2_pool_size };
++static ngx_conf_post_t  ngx_http_v2_preread_size_post =
++    { ngx_http_v2_preread_size };
+ static ngx_conf_post_t  ngx_http_v2_streams_index_mask_post =
+     { ngx_http_v2_streams_index_mask };
+ static ngx_conf_post_t  ngx_http_v2_chunk_size_post =
+@@ -84,6 +87,13 @@ static ngx_command_t  ngx_http_v2_commands[] = {
+       offsetof(ngx_http_v2_srv_conf_t, max_header_size),
+       NULL },
+ 
++    { ngx_string("http2_body_preread_size"),
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
++      ngx_conf_set_size_slot,
++      NGX_HTTP_SRV_CONF_OFFSET,
++      offsetof(ngx_http_v2_srv_conf_t, preread_size),
++      &ngx_http_v2_preread_size_post },
++
+     { ngx_string("http2_streams_index_size"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+       ngx_conf_set_num_slot,
+@@ -316,6 +326,8 @@ ngx_http_v2_create_srv_conf(ngx_conf_t *cf)
+     h2scf->max_field_size = NGX_CONF_UNSET_SIZE;
+     h2scf->max_header_size = NGX_CONF_UNSET_SIZE;
+ 
++    h2scf->preread_size = NGX_CONF_UNSET_SIZE;
++
+     h2scf->streams_index_mask = NGX_CONF_UNSET_UINT;
+ 
+     h2scf->recv_timeout = NGX_CONF_UNSET_MSEC;
+@@ -341,6 +353,8 @@ ngx_http_v2_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+     ngx_conf_merge_size_value(conf->max_header_size, prev->max_header_size,
+                               16384);
+ 
++    ngx_conf_merge_size_value(conf->preread_size, prev->preread_size, 65536);
++
+     ngx_conf_merge_uint_value(conf->streams_index_mask,
+                               prev->streams_index_mask, 32 - 1);
+ 
+@@ -420,6 +434,23 @@ ngx_http_v2_pool_size(ngx_conf_t *cf, void *post, void *data)
+ 
+ 
+ static char *
++ngx_http_v2_preread_size(ngx_conf_t *cf, void *post, void *data)
++{
++    size_t *sp = data;
++
++    if (*sp > NGX_HTTP_V2_MAX_WINDOW) {
++        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                           "the maximum body preread buffer size is %uz",
++                           NGX_HTTP_V2_MAX_WINDOW);
++
++        return NGX_CONF_ERROR;
++    }
++
++    return NGX_CONF_OK;
++}
++
++
++static char *
+ ngx_http_v2_streams_index_mask(ngx_conf_t *cf, void *post, void *data)
+ {
+     ngx_uint_t *np = data;
+diff --git a/src/http/v2/ngx_http_v2_module.h b/src/http/v2/ngx_http_v2_module.h
+index 95cc7d8..91f97c2 100644
+--- a/src/http/v2/ngx_http_v2_module.h
++++ b/src/http/v2/ngx_http_v2_module.h
+@@ -25,6 +25,7 @@ typedef struct {
+     ngx_uint_t                      concurrent_streams;
+     size_t                          max_field_size;
+     size_t                          max_header_size;
++    size_t                          preread_size;
+     ngx_uint_t                      streams_index_mask;
+     ngx_msec_t                      recv_timeout;
+     ngx_msec_t                      idle_timeout;
+diff --git a/src/mail/ngx_mail.c b/src/mail/ngx_mail.c
+index 6ad5a67..78cbe01 100644
+--- a/src/mail/ngx_mail.c
++++ b/src/mail/ngx_mail.c
+@@ -235,13 +235,13 @@ ngx_mail_add_ports(ngx_conf_t *cf, ngx_array_t *ports,
+     struct sockaddr_in6   *sin6;
+ #endif
+ 
+-    sa = &listen->u.sockaddr;
++    sa = &listen->sockaddr.sockaddr;
+ 
+     switch (sa->sa_family) {
+ 
+ #if (NGX_HAVE_INET6)
+     case AF_INET6:
+-        sin6 = &listen->u.sockaddr_in6;
++        sin6 = &listen->sockaddr.sockaddr_in6;
+         p = sin6->sin6_port;
+         break;
+ #endif
+@@ -253,7 +253,7 @@ ngx_mail_add_ports(ngx_conf_t *cf, ngx_array_t *ports,
+ #endif
+ 
+     default: /* AF_INET */
+-        sin = &listen->u.sockaddr_in;
++        sin = &listen->sockaddr.sockaddr_in;
+         p = sin->sin_port;
+         break;
+     }
+@@ -340,7 +340,7 @@ ngx_mail_optimize_servers(ngx_conf_t *cf, ngx_array_t *ports)
+                 continue;
+             }
+ 
+-            ls = ngx_create_listening(cf, &addr[i].opt.u.sockaddr,
++            ls = ngx_create_listening(cf, &addr[i].opt.sockaddr.sockaddr,
+                                       addr[i].opt.socklen);
+             if (ls == NULL) {
+                 return NGX_CONF_ERROR;
+@@ -423,7 +423,7 @@ ngx_mail_add_addrs(ngx_conf_t *cf, ngx_mail_port_t *mport,
+ 
+     for (i = 0; i < mport->naddrs; i++) {
+ 
+-        sin = &addr[i].opt.u.sockaddr_in;
++        sin = &addr[i].opt.sockaddr.sockaddr_in;
+         addrs[i].addr = sin->sin_addr.s_addr;
+ 
+         addrs[i].conf.ctx = addr[i].opt.ctx;
+@@ -431,8 +431,8 @@ ngx_mail_add_addrs(ngx_conf_t *cf, ngx_mail_port_t *mport,
+         addrs[i].conf.ssl = addr[i].opt.ssl;
+ #endif
+ 
+-        len = ngx_sock_ntop(&addr[i].opt.u.sockaddr, addr[i].opt.socklen, buf,
+-                            NGX_SOCKADDR_STRLEN, 1);
++        len = ngx_sock_ntop(&addr[i].opt.sockaddr.sockaddr, addr[i].opt.socklen,
++                            buf, NGX_SOCKADDR_STRLEN, 1);
+ 
+         p = ngx_pnalloc(cf->pool, len);
+         if (p == NULL) {
+@@ -472,7 +472,7 @@ ngx_mail_add_addrs6(ngx_conf_t *cf, ngx_mail_port_t *mport,
+ 
+     for (i = 0; i < mport->naddrs; i++) {
+ 
+-        sin6 = &addr[i].opt.u.sockaddr_in6;
++        sin6 = &addr[i].opt.sockaddr.sockaddr_in6;
+         addrs6[i].addr6 = sin6->sin6_addr;
+ 
+         addrs6[i].conf.ctx = addr[i].opt.ctx;
+@@ -480,8 +480,8 @@ ngx_mail_add_addrs6(ngx_conf_t *cf, ngx_mail_port_t *mport,
+         addrs6[i].conf.ssl = addr[i].opt.ssl;
+ #endif
+ 
+-        len = ngx_sock_ntop(&addr[i].opt.u.sockaddr, addr[i].opt.socklen, buf,
+-                            NGX_SOCKADDR_STRLEN, 1);
++        len = ngx_sock_ntop(&addr[i].opt.sockaddr.sockaddr, addr[i].opt.socklen,
++                            buf, NGX_SOCKADDR_STRLEN, 1);
+ 
+         p = ngx_pnalloc(cf->pool, len);
+         if (p == NULL) {
+diff --git a/src/mail/ngx_mail.h b/src/mail/ngx_mail.h
+index bfbf768..ae1aa41 100644
+--- a/src/mail/ngx_mail.h
++++ b/src/mail/ngx_mail.h
+@@ -27,18 +27,7 @@ typedef struct {
+ 
+ 
+ typedef struct {
+-    union {
+-        struct sockaddr     sockaddr;
+-        struct sockaddr_in  sockaddr_in;
+-#if (NGX_HAVE_INET6)
+-        struct sockaddr_in6 sockaddr_in6;
+-#endif
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-        struct sockaddr_un  sockaddr_un;
+-#endif
+-        u_char              sockaddr_data[NGX_SOCKADDRLEN];
+-    } u;
+-
++    ngx_sockaddr_t          sockaddr;
+     socklen_t               socklen;
+ 
+     /* server ctx */
+diff --git a/src/mail/ngx_mail_core_module.c b/src/mail/ngx_mail_core_module.c
+index 8ea8ea9..d992402 100644
+--- a/src/mail/ngx_mail_core_module.c
++++ b/src/mail/ngx_mail_core_module.c
+@@ -288,19 +288,12 @@ ngx_mail_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ {
+     ngx_mail_core_srv_conf_t  *cscf = conf;
+ 
+-    size_t                      len, off;
+-    in_port_t                   port;
+     ngx_str_t                  *value;
+     ngx_url_t                   u;
+     ngx_uint_t                  i, m;
+-    struct sockaddr            *sa;
+     ngx_mail_listen_t          *ls;
+     ngx_mail_module_t          *module;
+-    struct sockaddr_in         *sin;
+     ngx_mail_core_main_conf_t  *cmcf;
+-#if (NGX_HAVE_INET6)
+-    struct sockaddr_in6        *sin6;
+-#endif
+ 
+     value = cf->args->elts;
+ 
+@@ -325,49 +318,13 @@ ngx_mail_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     for (i = 0; i < cmcf->listen.nelts; i++) {
+ 
+-        sa = &ls[i].u.sockaddr;
+-
+-        if (sa->sa_family != u.family) {
+-            continue;
+-        }
+-
+-        switch (sa->sa_family) {
+-
+-#if (NGX_HAVE_INET6)
+-        case AF_INET6:
+-            off = offsetof(struct sockaddr_in6, sin6_addr);
+-            len = 16;
+-            sin6 = &ls[i].u.sockaddr_in6;
+-            port = ntohs(sin6->sin6_port);
+-            break;
+-#endif
+-
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-        case AF_UNIX:
+-            off = offsetof(struct sockaddr_un, sun_path);
+-            len = sizeof(((struct sockaddr_un *) sa)->sun_path);
+-            port = 0;
+-            break;
+-#endif
+-
+-        default: /* AF_INET */
+-            off = offsetof(struct sockaddr_in, sin_addr);
+-            len = 4;
+-            sin = &ls[i].u.sockaddr_in;
+-            port = ntohs(sin->sin_port);
+-            break;
+-        }
+-
+-        if (ngx_memcmp(ls[i].u.sockaddr_data + off, u.sockaddr + off, len)
+-            != 0)
++        if (ngx_cmp_sockaddr(&ls[i].sockaddr.sockaddr, ls[i].socklen,
++                             (struct sockaddr *) &u.sockaddr, u.socklen, 1)
++            != NGX_OK)
+         {
+             continue;
+         }
+ 
+-        if (port != u.port) {
+-            continue;
+-        }
+-
+         ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                            "duplicate \"%V\" address and port pair", &u.url);
+         return NGX_CONF_ERROR;
+@@ -380,7 +337,7 @@ ngx_mail_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     ngx_memzero(ls, sizeof(ngx_mail_listen_t));
+ 
+-    ngx_memcpy(&ls->u.sockaddr, u.sockaddr, u.socklen);
++    ngx_memcpy(&ls->sockaddr.sockaddr, &u.sockaddr, u.socklen);
+ 
+     ls->socklen = u.socklen;
+     ls->backlog = NGX_LISTEN_BACKLOG;
+@@ -434,11 +391,10 @@ ngx_mail_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+         if (ngx_strncmp(value[i].data, "ipv6only=o", 10) == 0) {
+ #if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
++            size_t  len;
+             u_char  buf[NGX_SOCKADDR_STRLEN];
+ 
+-            sa = &ls->u.sockaddr;
+-
+-            if (sa->sa_family == AF_INET6) {
++            if (ls->sockaddr.sockaddr.sa_family == AF_INET6) {
+ 
+                 if (ngx_strcmp(&value[i].data[10], "n") == 0) {
+                     ls->ipv6only = 1;
+@@ -456,7 +412,7 @@ ngx_mail_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+                 ls->bind = 1;
+ 
+             } else {
+-                len = ngx_sock_ntop(sa, ls->socklen, buf,
++                len = ngx_sock_ntop(&ls->sockaddr.sockaddr, ls->socklen, buf,
+                                     NGX_SOCKADDR_STRLEN, 1);
+ 
+                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+diff --git a/src/mail/ngx_mail_ssl_module.c b/src/mail/ngx_mail_ssl_module.c
+index ff5c141..83cffb8 100644
+--- a/src/mail/ngx_mail_ssl_module.c
++++ b/src/mail/ngx_mail_ssl_module.c
+@@ -11,7 +11,7 @@
+ 
+ 
+ #define NGX_DEFAULT_CIPHERS     "HIGH:!aNULL:!MD5"
+-#define NGX_DEFAULT_ECDH_CURVE  "prime256v1"
++#define NGX_DEFAULT_ECDH_CURVE  "auto"
+ 
+ 
+ static void *ngx_mail_ssl_create_conf(ngx_conf_t *cf);
+@@ -73,16 +73,16 @@ static ngx_command_t  ngx_mail_ssl_commands[] = {
+ 
+     { ngx_string("ssl_certificate"),
+       NGX_MAIL_MAIN_CONF|NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_MAIL_SRV_CONF_OFFSET,
+-      offsetof(ngx_mail_ssl_conf_t, certificate),
++      offsetof(ngx_mail_ssl_conf_t, certificates),
+       NULL },
+ 
+     { ngx_string("ssl_certificate_key"),
+       NGX_MAIL_MAIN_CONF|NGX_MAIL_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_MAIL_SRV_CONF_OFFSET,
+-      offsetof(ngx_mail_ssl_conf_t, certificate_key),
++      offsetof(ngx_mail_ssl_conf_t, certificate_keys),
+       NULL },
+ 
+     { ngx_string("ssl_password_file"),
+@@ -238,8 +238,6 @@ ngx_mail_ssl_create_conf(ngx_conf_t *cf)
+      * set by ngx_pcalloc():
+      *
+      *     scf->protocols = 0;
+-     *     scf->certificate = { 0, NULL };
+-     *     scf->certificate_key = { 0, NULL };
+      *     scf->dhparam = { 0, NULL };
+      *     scf->ecdh_curve = { 0, NULL };
+      *     scf->client_certificate = { 0, NULL };
+@@ -251,6 +249,8 @@ ngx_mail_ssl_create_conf(ngx_conf_t *cf)
+ 
+     scf->enable = NGX_CONF_UNSET;
+     scf->starttls = NGX_CONF_UNSET_UINT;
++    scf->certificates = NGX_CONF_UNSET_PTR;
++    scf->certificate_keys = NGX_CONF_UNSET_PTR;
+     scf->passwords = NGX_CONF_UNSET_PTR;
+     scf->prefer_server_ciphers = NGX_CONF_UNSET;
+     scf->verify = NGX_CONF_UNSET_UINT;
+@@ -290,8 +290,9 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+     ngx_conf_merge_uint_value(conf->verify, prev->verify, 0);
+     ngx_conf_merge_uint_value(conf->verify_depth, prev->verify_depth, 1);
+ 
+-    ngx_conf_merge_str_value(conf->certificate, prev->certificate, "");
+-    ngx_conf_merge_str_value(conf->certificate_key, prev->certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->certificates, prev->certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->certificate_keys, prev->certificate_keys,
++                         NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->passwords, prev->passwords, NULL);
+ 
+@@ -328,7 +329,7 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     if (*mode) {
+ 
+-        if (conf->certificate.len == 0) {
++        if (conf->certificates == NULL) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate\" is defined for "
+                           "the \"%s\" directive in %s:%ui",
+@@ -336,7 +337,7 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+             return NGX_CONF_ERROR;
+         }
+ 
+-        if (conf->certificate_key.len == 0) {
++        if (conf->certificate_keys == NULL) {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate_key\" is defined for "
+                           "the \"%s\" directive in %s:%ui",
+@@ -344,17 +345,31 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+             return NGX_CONF_ERROR;
+         }
+ 
++        if (conf->certificate_keys->nelts < conf->certificates->nelts) {
++            ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                          "no \"ssl_certificate_key\" is defined "
++                          "for certificate \"%V\" and "
++                          "the \"ssl\" directive in %s:%ui",
++                          ((ngx_str_t *) conf->certificates->elts)
++                          + conf->certificates->nelts - 1,
++                          conf->file, conf->line);
++            return NGX_CONF_ERROR;
++        }
++
+     } else {
+ 
+-        if (conf->certificate.len == 0) {
++        if (conf->certificates == NULL) {
+             return NGX_CONF_OK;
+         }
+ 
+-        if (conf->certificate_key.len == 0) {
++        if (conf->certificate_keys == NULL
++            || conf->certificate_keys->nelts < conf->certificates->nelts)
++        {
+             ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                           "no \"ssl_certificate_key\" is defined "
+                           "for certificate \"%V\"",
+-                          &conf->certificate);
++                          ((ngx_str_t *) conf->certificates->elts)
++                          + conf->certificates->nelts - 1);
+             return NGX_CONF_ERROR;
+         }
+     }
+@@ -371,8 +386,8 @@ ngx_mail_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = &conf->ssl;
+ 
+-    if (ngx_ssl_certificate(cf, &conf->ssl, &conf->certificate,
+-                            &conf->certificate_key, conf->passwords)
++    if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
++                             conf->certificate_keys, conf->passwords)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+diff --git a/src/mail/ngx_mail_ssl_module.h b/src/mail/ngx_mail_ssl_module.h
+index 296a6a2..26628d5 100644
+--- a/src/mail/ngx_mail_ssl_module.h
++++ b/src/mail/ngx_mail_ssl_module.h
+@@ -35,8 +35,9 @@ typedef struct {
+ 
+     time_t           session_timeout;
+ 
+-    ngx_str_t        certificate;
+-    ngx_str_t        certificate_key;
++    ngx_array_t     *certificates;
++    ngx_array_t     *certificate_keys;
++
+     ngx_str_t        dhparam;
+     ngx_str_t        ecdh_curve;
+     ngx_str_t        client_certificate;
+diff --git a/src/os/unix/ngx_readv_chain.c b/src/os/unix/ngx_readv_chain.c
+index d23508e..454cfdc 100644
+--- a/src/os/unix/ngx_readv_chain.c
++++ b/src/os/unix/ngx_readv_chain.c
+@@ -53,6 +53,20 @@ ngx_readv_chain(ngx_connection_t *c, ngx_chain_t *chain, off_t limit)
+ 
+ #endif
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++
++    if (ngx_event_flags & NGX_USE_EPOLL_EVENT) {
++        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0,
++                       "readv: eof:%d, avail:%d",
++                       rev->pending_eof, rev->available);
++
++        if (!rev->available && !rev->pending_eof) {
++            return NGX_AGAIN;
++        }
++    }
++
++#endif
++
+     prev = NULL;
+     iov = NULL;
+     size = 0;
+@@ -151,6 +165,24 @@ ngx_readv_chain(ngx_connection_t *c, ngx_chain_t *chain, off_t limit)
+ 
+ #endif
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++
++            if ((ngx_event_flags & NGX_USE_EPOLL_EVENT)
++                && ngx_use_epoll_rdhup)
++            {
++                if (n < size) {
++                    if (!rev->pending_eof) {
++                        rev->ready = 0;
++                    }
++
++                    rev->available = 0;
++                }
++
++                return n;
++            }
++
++#endif
++
+             if (n < size && !(ngx_event_flags & NGX_USE_GREEDY_EVENT)) {
+                 rev->ready = 0;
+             }
+diff --git a/src/os/unix/ngx_recv.c b/src/os/unix/ngx_recv.c
+index 5013ae3..c85fd45 100644
+--- a/src/os/unix/ngx_recv.c
++++ b/src/os/unix/ngx_recv.c
+@@ -50,6 +50,21 @@ ngx_unix_recv(ngx_connection_t *c, u_char *buf, size_t size)
+ 
+ #endif
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++
++    if (ngx_event_flags & NGX_USE_EPOLL_EVENT) {
++        ngx_log_debug2(NGX_LOG_DEBUG_EVENT, c->log, 0,
++                       "recv: eof:%d, avail:%d",
++                       rev->pending_eof, rev->available);
++
++        if (!rev->available && !rev->pending_eof) {
++            rev->ready = 0;
++            return NGX_AGAIN;
++        }
++    }
++
++#endif
++
+     do {
+         n = recv(c->fd, buf, size, 0);
+ 
+@@ -101,6 +116,24 @@ ngx_unix_recv(ngx_connection_t *c, u_char *buf, size_t size)
+ 
+ #endif
+ 
++#if (NGX_HAVE_EPOLLRDHUP)
++
++            if ((ngx_event_flags & NGX_USE_EPOLL_EVENT)
++                && ngx_use_epoll_rdhup)
++            {
++                if ((size_t) n < size) {
++                    if (!rev->pending_eof) {
++                        rev->ready = 0;
++                    }
++
++                    rev->available = 0;
++                }
++
++                return n;
++            }
++
++#endif
++
+             if ((size_t) n < size
+                 && !(ngx_event_flags & NGX_USE_GREEDY_EVENT))
+             {
+diff --git a/src/stream/ngx_stream.c b/src/stream/ngx_stream.c
+index 3bd8f6d..055622d 100644
+--- a/src/stream/ngx_stream.c
++++ b/src/stream/ngx_stream.c
+@@ -250,13 +250,13 @@ ngx_stream_add_ports(ngx_conf_t *cf, ngx_array_t *ports,
+     struct sockaddr_in6     *sin6;
+ #endif
+ 
+-    sa = &listen->u.sockaddr;
++    sa = &listen->sockaddr.sockaddr;
+ 
+     switch (sa->sa_family) {
+ 
+ #if (NGX_HAVE_INET6)
+     case AF_INET6:
+-        sin6 = &listen->u.sockaddr_in6;
++        sin6 = &listen->sockaddr.sockaddr_in6;
+         p = sin6->sin6_port;
+         break;
+ #endif
+@@ -268,7 +268,7 @@ ngx_stream_add_ports(ngx_conf_t *cf, ngx_array_t *ports,
+ #endif
+ 
+     default: /* AF_INET */
+-        sin = &listen->u.sockaddr_in;
++        sin = &listen->sockaddr.sockaddr_in;
+         p = sin->sin_port;
+         break;
+     }
+@@ -359,7 +359,7 @@ ngx_stream_optimize_servers(ngx_conf_t *cf, ngx_array_t *ports)
+                 continue;
+             }
+ 
+-            ls = ngx_create_listening(cf, &addr[i].opt.u.sockaddr,
++            ls = ngx_create_listening(cf, &addr[i].opt.sockaddr.sockaddr,
+                                       addr[i].opt.socklen);
+             if (ls == NULL) {
+                 return NGX_CONF_ERROR;
+@@ -453,7 +453,7 @@ ngx_stream_add_addrs(ngx_conf_t *cf, ngx_stream_port_t *stport,
+ 
+     for (i = 0; i < stport->naddrs; i++) {
+ 
+-        sin = &addr[i].opt.u.sockaddr_in;
++        sin = &addr[i].opt.sockaddr.sockaddr_in;
+         addrs[i].addr = sin->sin_addr.s_addr;
+ 
+         addrs[i].conf.ctx = addr[i].opt.ctx;
+@@ -461,8 +461,8 @@ ngx_stream_add_addrs(ngx_conf_t *cf, ngx_stream_port_t *stport,
+         addrs[i].conf.ssl = addr[i].opt.ssl;
+ #endif
+ 
+-        len = ngx_sock_ntop(&addr[i].opt.u.sockaddr, addr[i].opt.socklen, buf,
+-                            NGX_SOCKADDR_STRLEN, 1);
++        len = ngx_sock_ntop(&addr[i].opt.sockaddr.sockaddr, addr[i].opt.socklen,
++                            buf, NGX_SOCKADDR_STRLEN, 1);
+ 
+         p = ngx_pnalloc(cf->pool, len);
+         if (p == NULL) {
+@@ -502,7 +502,7 @@ ngx_stream_add_addrs6(ngx_conf_t *cf, ngx_stream_port_t *stport,
+ 
+     for (i = 0; i < stport->naddrs; i++) {
+ 
+-        sin6 = &addr[i].opt.u.sockaddr_in6;
++        sin6 = &addr[i].opt.sockaddr.sockaddr_in6;
+         addrs6[i].addr6 = sin6->sin6_addr;
+ 
+         addrs6[i].conf.ctx = addr[i].opt.ctx;
+@@ -510,8 +510,8 @@ ngx_stream_add_addrs6(ngx_conf_t *cf, ngx_stream_port_t *stport,
+         addrs6[i].conf.ssl = addr[i].opt.ssl;
+ #endif
+ 
+-        len = ngx_sock_ntop(&addr[i].opt.u.sockaddr, addr[i].opt.socklen, buf,
+-                            NGX_SOCKADDR_STRLEN, 1);
++        len = ngx_sock_ntop(&addr[i].opt.sockaddr.sockaddr, addr[i].opt.socklen,
++                            buf, NGX_SOCKADDR_STRLEN, 1);
+ 
+         p = ngx_pnalloc(cf->pool, len);
+         if (p == NULL) {
+diff --git a/src/stream/ngx_stream.h b/src/stream/ngx_stream.h
+index 49efa45..1c35173 100644
+--- a/src/stream/ngx_stream.h
++++ b/src/stream/ngx_stream.h
+@@ -31,18 +31,7 @@ typedef struct {
+ 
+ 
+ typedef struct {
+-    union {
+-        struct sockaddr     sockaddr;
+-        struct sockaddr_in  sockaddr_in;
+-#if (NGX_HAVE_INET6)
+-        struct sockaddr_in6 sockaddr_in6;
+-#endif
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-        struct sockaddr_un  sockaddr_un;
+-#endif
+-        u_char              sockaddr_data[NGX_SOCKADDRLEN];
+-    } u;
+-
++    ngx_sockaddr_t          sockaddr;
+     socklen_t               socklen;
+ 
+     /* server ctx */
+diff --git a/src/stream/ngx_stream_core_module.c b/src/stream/ngx_stream_core_module.c
+index ebc2b1c..075db82 100644
+--- a/src/stream/ngx_stream_core_module.c
++++ b/src/stream/ngx_stream_core_module.c
+@@ -248,18 +248,11 @@ ngx_stream_core_server(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ static char *
+ ngx_stream_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ {
+-    size_t                        len, off;
+-    in_port_t                     port;
+     ngx_str_t                    *value;
+     ngx_url_t                     u;
+     ngx_uint_t                    i, backlog;
+-    struct sockaddr              *sa;
+-    struct sockaddr_in           *sin;
+-    ngx_stream_listen_t          *ls;
++    ngx_stream_listen_t          *ls, *als;
+     ngx_stream_core_main_conf_t  *cmcf;
+-#if (NGX_HAVE_INET6)
+-    struct sockaddr_in6          *sin6;
+-#endif
+ 
+     value = cf->args->elts;
+ 
+@@ -280,58 +273,6 @@ ngx_stream_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     cmcf = ngx_stream_conf_get_module_main_conf(cf, ngx_stream_core_module);
+ 
+-    ls = cmcf->listen.elts;
+-
+-    for (i = 0; i < cmcf->listen.nelts; i++) {
+-
+-        sa = &ls[i].u.sockaddr;
+-
+-        if (sa->sa_family != u.family) {
+-            continue;
+-        }
+-
+-        switch (sa->sa_family) {
+-
+-#if (NGX_HAVE_INET6)
+-        case AF_INET6:
+-            off = offsetof(struct sockaddr_in6, sin6_addr);
+-            len = 16;
+-            sin6 = &ls[i].u.sockaddr_in6;
+-            port = sin6->sin6_port;
+-            break;
+-#endif
+-
+-#if (NGX_HAVE_UNIX_DOMAIN)
+-        case AF_UNIX:
+-            off = offsetof(struct sockaddr_un, sun_path);
+-            len = sizeof(((struct sockaddr_un *) sa)->sun_path);
+-            port = 0;
+-            break;
+-#endif
+-
+-        default: /* AF_INET */
+-            off = offsetof(struct sockaddr_in, sin_addr);
+-            len = 4;
+-            sin = &ls[i].u.sockaddr_in;
+-            port = sin->sin_port;
+-            break;
+-        }
+-
+-        if (ngx_memcmp(ls[i].u.sockaddr_data + off, u.sockaddr + off, len)
+-            != 0)
+-        {
+-            continue;
+-        }
+-
+-        if (port != u.port) {
+-            continue;
+-        }
+-
+-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+-                           "duplicate \"%V\" address and port pair", &u.url);
+-        return NGX_CONF_ERROR;
+-    }
+-
+     ls = ngx_array_push(&cmcf->listen);
+     if (ls == NULL) {
+         return NGX_CONF_ERROR;
+@@ -339,7 +280,7 @@ ngx_stream_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     ngx_memzero(ls, sizeof(ngx_stream_listen_t));
+ 
+-    ngx_memcpy(&ls->u.sockaddr, u.sockaddr, u.socklen);
++    ngx_memcpy(&ls->sockaddr.sockaddr, &u.sockaddr, u.socklen);
+ 
+     ls->socklen = u.socklen;
+     ls->backlog = NGX_LISTEN_BACKLOG;
+@@ -384,11 +325,10 @@ ngx_stream_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+         if (ngx_strncmp(value[i].data, "ipv6only=o", 10) == 0) {
+ #if (NGX_HAVE_INET6 && defined IPV6_V6ONLY)
++            size_t  len;
+             u_char  buf[NGX_SOCKADDR_STRLEN];
+ 
+-            sa = &ls->u.sockaddr;
+-
+-            if (sa->sa_family == AF_INET6) {
++            if (ls->sockaddr.sockaddr.sa_family == AF_INET6) {
+ 
+                 if (ngx_strcmp(&value[i].data[10], "n") == 0) {
+                     ls->ipv6only = 1;
+@@ -406,7 +346,7 @@ ngx_stream_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+                 ls->bind = 1;
+ 
+             } else {
+-                len = ngx_sock_ntop(sa, ls->socklen, buf,
++                len = ngx_sock_ntop(&ls->sockaddr.sockaddr, ls->socklen, buf,
+                                     NGX_SOCKADDR_STRLEN, 1);
+ 
+                 ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+@@ -558,5 +498,24 @@ ngx_stream_core_listen(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+         }
+     }
+ 
++    als = cmcf->listen.elts;
++
++    for (i = 0; i < cmcf->listen.nelts - 1; i++) {
++        if (ls->type != als[i].type) {
++            continue;
++        }
++
++        if (ngx_cmp_sockaddr(&als[i].sockaddr.sockaddr, als[i].socklen,
++                             &ls->sockaddr.sockaddr, ls->socklen, 1)
++            != NGX_OK)
++        {
++            continue;
++        }
++
++        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                           "duplicate \"%V\" address and port pair", &u.url);
++        return NGX_CONF_ERROR;
++    }
++
+     return NGX_CONF_OK;
+ }
+diff --git a/src/stream/ngx_stream_proxy_module.c b/src/stream/ngx_stream_proxy_module.c
+index 6c535fd..d4fa994 100644
+--- a/src/stream/ngx_stream_proxy_module.c
++++ b/src/stream/ngx_stream_proxy_module.c
+@@ -11,6 +11,14 @@
+ 
+ 
+ typedef struct {
++    ngx_addr_t                      *addr;
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++    ngx_uint_t                       transparent; /* unsigned  transparent:1; */
++#endif
++} ngx_stream_upstream_local_t;
++
++
++typedef struct {
+     ngx_msec_t                       connect_timeout;
+     ngx_msec_t                       timeout;
+     ngx_msec_t                       next_upstream_timeout;
+@@ -21,7 +29,7 @@ typedef struct {
+     ngx_uint_t                       next_upstream_tries;
+     ngx_flag_t                       next_upstream;
+     ngx_flag_t                       proxy_protocol;
+-    ngx_addr_t                      *local;
++    ngx_stream_upstream_local_t     *local;
+ 
+ #if (NGX_STREAM_SSL)
+     ngx_flag_t                       ssl_enable;
+@@ -47,6 +55,8 @@ typedef struct {
+ 
+ 
+ static void ngx_stream_proxy_handler(ngx_stream_session_t *s);
++static ngx_int_t ngx_stream_proxy_set_local(ngx_stream_session_t *s,
++    ngx_stream_upstream_t *u, ngx_stream_upstream_local_t *local);
+ static void ngx_stream_proxy_connect(ngx_stream_session_t *s);
+ static void ngx_stream_proxy_init_upstream(ngx_stream_session_t *s);
+ static void ngx_stream_proxy_upstream_handler(ngx_event_t *ev);
+@@ -113,7 +123,7 @@ static ngx_command_t  ngx_stream_proxy_commands[] = {
+       NULL },
+ 
+     { ngx_string("proxy_bind"),
+-      NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
++      NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE12,
+       ngx_stream_proxy_bind,
+       NGX_STREAM_SRV_CONF_OFFSET,
+       0,
+@@ -358,7 +368,11 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
+     u->peer.log = c->log;
+     u->peer.log_error = NGX_ERROR_ERR;
+ 
+-    u->peer.local = pscf->local;
++    if (ngx_stream_proxy_set_local(s, u, pscf->local) != NGX_OK) {
++        ngx_stream_proxy_finalize(s, NGX_ERROR);
++        return;
++    }
++
+     u->peer.type = c->type;
+ 
+     uscf = pscf->upstream;
+@@ -428,6 +442,71 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
+ }
+ 
+ 
++static ngx_int_t
++ngx_stream_proxy_set_local(ngx_stream_session_t *s, ngx_stream_upstream_t *u,
++    ngx_stream_upstream_local_t *local)
++{
++    ngx_addr_t           *addr;
++    ngx_connection_t     *c;
++    struct sockaddr_in   *sin;
++#if (NGX_HAVE_INET6)
++    struct sockaddr_in6  *sin6;
++#endif
++
++    if (local == NULL) {
++        u->peer.local = NULL;
++        return NGX_OK;
++    }
++
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++    u->peer.transparent = local->transparent;
++#endif
++
++    if (local->addr) {
++        u->peer.local = local->addr;
++        return NGX_OK;
++    }
++
++    /* $remote_addr */
++
++    c = s->connection;
++
++    addr = ngx_palloc(c->pool, sizeof(ngx_addr_t));
++    if (addr == NULL) {
++        return NGX_ERROR;
++    }
++
++    addr->socklen = c->socklen;
++
++    addr->sockaddr = ngx_palloc(c->pool, addr->socklen);
++    if (addr->sockaddr == NULL) {
++        return NGX_ERROR;
++    }
++
++    ngx_memcpy(addr->sockaddr, c->sockaddr, c->socklen);
++
++    switch (addr->sockaddr->sa_family) {
++
++    case AF_INET:
++        sin = (struct sockaddr_in *) addr->sockaddr;
++        sin->sin_port = 0;
++        break;
++
++#if (NGX_HAVE_INET6)
++    case AF_INET6:
++        sin6 = (struct sockaddr_in6 *) addr->sockaddr;
++        sin6->sin6_port = 0;
++        break;
++#endif
++    }
++
++    addr->name = c->addr_text;
++    u->peer.local = addr;
++
++    return NGX_OK;
++}
++
++
+ static void
+ ngx_stream_proxy_connect(ngx_stream_session_t *s)
+ {
+@@ -1637,8 +1716,9 @@ ngx_stream_proxy_bind(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ {
+     ngx_stream_proxy_srv_conf_t *pscf = conf;
+ 
+-    ngx_int_t   rc;
+-    ngx_str_t  *value;
++    ngx_int_t                     rc;
++    ngx_str_t                    *value;
++    ngx_stream_upstream_local_t  *local;
+ 
+     if (pscf->local != NGX_CONF_UNSET_PTR) {
+         return "is duplicate";
+@@ -1646,29 +1726,57 @@ ngx_stream_proxy_bind(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+ 
+     value = cf->args->elts;
+ 
+-    if (ngx_strcmp(value[1].data, "off") == 0) {
++    if (cf->args->nelts == 2 && ngx_strcmp(value[1].data, "off") == 0) {
+         pscf->local = NULL;
+         return NGX_CONF_OK;
+     }
+ 
+-    pscf->local = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
+-    if (pscf->local == NULL) {
++    local = ngx_palloc(cf->pool, sizeof(ngx_stream_upstream_local_t));
++    if (local == NULL) {
+         return NGX_CONF_ERROR;
+     }
+ 
+-    rc = ngx_parse_addr(cf->pool, pscf->local, value[1].data, value[1].len);
++    pscf->local = local;
+ 
+-    switch (rc) {
+-    case NGX_OK:
+-        pscf->local->name = value[1];
+-        return NGX_CONF_OK;
++    if (ngx_strcmp(value[1].data, "$remote_addr") != 0) {
++        local->addr = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
++        if (local->addr == NULL) {
++            return NGX_CONF_ERROR;
++        }
+ 
+-    case NGX_DECLINED:
+-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+-                           "invalid address \"%V\"", &value[1]);
+-        /* fall through */
++        rc = ngx_parse_addr(cf->pool, local->addr, value[1].data, value[1].len);
+ 
+-    default:
+-        return NGX_CONF_ERROR;
++        switch (rc) {
++        case NGX_OK:
++            local->addr->name = value[1];
++            break;
++
++        case NGX_DECLINED:
++            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                               "invalid address \"%V\"", &value[1]);
++            /* fall through */
++
++        default:
++            return NGX_CONF_ERROR;
++        }
++    }
++
++    if (cf->args->nelts > 2) {
++        if (ngx_strcmp(value[2].data, "transparent") == 0) {
++#if (NGX_HAVE_TRANSPARENT_PROXY)
++            local->transparent = 1;
++
++#else
++            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                               "transparent proxying is not supported "
++                               "on this platform, ignored");
++#endif
++        } else {
++            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
++                               "invalid parameter \"%V\"", &value[2]);
++            return NGX_CONF_ERROR;
++        }
+     }
++
++    return NGX_CONF_OK;
+ }
+diff --git a/src/stream/ngx_stream_ssl_module.c b/src/stream/ngx_stream_ssl_module.c
+index e12da1b..2d2f3ca 100644
+--- a/src/stream/ngx_stream_ssl_module.c
++++ b/src/stream/ngx_stream_ssl_module.c
+@@ -11,7 +11,7 @@
+ 
+ 
+ #define NGX_DEFAULT_CIPHERS     "HIGH:!aNULL:!MD5"
+-#define NGX_DEFAULT_ECDH_CURVE  "prime256v1"
++#define NGX_DEFAULT_ECDH_CURVE  "auto"
+ 
+ 
+ static void *ngx_stream_ssl_create_conf(ngx_conf_t *cf);
+@@ -45,16 +45,16 @@ static ngx_command_t  ngx_stream_ssl_commands[] = {
+ 
+     { ngx_string("ssl_certificate"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+-      offsetof(ngx_stream_ssl_conf_t, certificate),
++      offsetof(ngx_stream_ssl_conf_t, certificates),
+       NULL },
+ 
+     { ngx_string("ssl_certificate_key"),
+       NGX_STREAM_MAIN_CONF|NGX_STREAM_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_STREAM_SRV_CONF_OFFSET,
+-      offsetof(ngx_stream_ssl_conf_t, certificate_key),
++      offsetof(ngx_stream_ssl_conf_t, certificate_keys),
+       NULL },
+ 
+     { ngx_string("ssl_password_file"),
+@@ -175,8 +175,6 @@ ngx_stream_ssl_create_conf(ngx_conf_t *cf)
+      * set by ngx_pcalloc():
+      *
+      *     scf->protocols = 0;
+-     *     scf->certificate = { 0, NULL };
+-     *     scf->certificate_key = { 0, NULL };
+      *     scf->dhparam = { 0, NULL };
+      *     scf->ecdh_curve = { 0, NULL };
+      *     scf->ciphers = { 0, NULL };
+@@ -184,6 +182,8 @@ ngx_stream_ssl_create_conf(ngx_conf_t *cf)
+      */
+ 
+     scf->handshake_timeout = NGX_CONF_UNSET_MSEC;
++    scf->certificates = NGX_CONF_UNSET_PTR;
++    scf->certificate_keys = NGX_CONF_UNSET_PTR;
+     scf->passwords = NGX_CONF_UNSET_PTR;
+     scf->prefer_server_ciphers = NGX_CONF_UNSET;
+     scf->builtin_session_cache = NGX_CONF_UNSET;
+@@ -216,8 +216,9 @@ ngx_stream_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+                          (NGX_CONF_BITMASK_SET|NGX_SSL_TLSv1
+                           |NGX_SSL_TLSv1_1|NGX_SSL_TLSv1_2));
+ 
+-    ngx_conf_merge_str_value(conf->certificate, prev->certificate, "");
+-    ngx_conf_merge_str_value(conf->certificate_key, prev->certificate_key, "");
++    ngx_conf_merge_ptr_value(conf->certificates, prev->certificates, NULL);
++    ngx_conf_merge_ptr_value(conf->certificate_keys, prev->certificate_keys,
++                         NULL);
+ 
+     ngx_conf_merge_ptr_value(conf->passwords, prev->passwords, NULL);
+ 
+@@ -231,15 +232,18 @@ ngx_stream_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+ 
+     conf->ssl.log = cf->log;
+ 
+-    if (conf->certificate.len == 0) {
++    if (conf->certificates == NULL) {
+         return NGX_CONF_OK;
+     }
+ 
+-    if (conf->certificate_key.len == 0) {
++    if (conf->certificate_keys == NULL
++        || conf->certificate_keys->nelts < conf->certificates->nelts)
++    {
+         ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
+                       "no \"ssl_certificate_key\" is defined "
+                       "for certificate \"%V\"",
+-                      &conf->certificate);
++                      ((ngx_str_t *) conf->certificates->elts)
++                      + conf->certificates->nelts - 1);
+         return NGX_CONF_ERROR;
+     }
+ 
+@@ -255,8 +259,8 @@ ngx_stream_ssl_merge_conf(ngx_conf_t *cf, void *parent, void *child)
+     cln->handler = ngx_ssl_cleanup_ctx;
+     cln->data = &conf->ssl;
+ 
+-    if (ngx_ssl_certificate(cf, &conf->ssl, &conf->certificate,
+-                            &conf->certificate_key, conf->passwords)
++    if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
++                             conf->certificate_keys, conf->passwords)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+diff --git a/src/stream/ngx_stream_ssl_module.h b/src/stream/ngx_stream_ssl_module.h
+index 85e8b6e..9b1c41a 100644
+--- a/src/stream/ngx_stream_ssl_module.h
++++ b/src/stream/ngx_stream_ssl_module.h
+@@ -27,8 +27,9 @@ typedef struct {
+ 
+     time_t           session_timeout;
+ 
+-    ngx_str_t        certificate;
+-    ngx_str_t        certificate_key;
++    ngx_array_t     *certificates;
++    ngx_array_t     *certificate_keys;
++
+     ngx_str_t        dhparam;
+     ngx_str_t        ecdh_curve;
+ 

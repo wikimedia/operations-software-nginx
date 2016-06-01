@@ -1,2 +1,4 @@
 perl-use-dpkg-buildflags.patch
 0002-Make-sure-signature-stays-the-same-in-all-nginx-buil.patch
+0098-eleven.patch
+0099-eleven-one.patch

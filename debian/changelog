@@ -1,3 +1,11 @@
+nginx (1.11.1-1+wmf1) jessie; urgency=medium
+
+  * Based on debian 1.10.0-1 + debian's dh-strip committed fix
+  * Imported 1.11.0 + 1.11.1 diffs to debian/patches/ for now
+  * No truly-local source patches for the first time in a while (yay!)
+
+ -- Brandon Black <bblack@wikimedia.org>  Wed, 01 Jun 2016 11:44:33 +0000
+
 nginx (1.10.0-1) unstable; urgency=medium
 
   [ Christos Trochalakis ]
