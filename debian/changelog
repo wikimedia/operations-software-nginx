@@ -1,3 +1,9 @@
+nginx (1.11.1-1+wmf2) jessie; urgency=medium
+
+  * Imported Cloudflare's dynamic TLS record sizing patch
+
+ -- Brandon Black <bblack@wikimedia.org>  Mon, 13 Jun 2016 13:38:24 +0000
+
 nginx (1.11.1-1+wmf1) jessie; urgency=medium
 
   * Based on debian 1.10.0-1 + debian's dh-strip committed fix
