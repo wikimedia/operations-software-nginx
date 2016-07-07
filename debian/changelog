@@ -1,11 +1,11 @@
-nginx (1.10.1-2) UNRELEASED; urgency=medium
+nginx (1.11.2-1~exp1) experimental; urgency=medium
 
   [ Christos Trochalakis ]
+  * New upstream release (1.11.2)
   * debian/control:
     Don't allow building against liblua5.1-0-dev on architectures
     that libluajit is available.
-
- -- Christos Trochalakis <yatiohi@ideopolis.gr>  Tue, 07 Jun 2016 10:47:36 +0300
+ -- Christos Trochalakis <yatiohi@ideopolis.gr>  Thu, 07 Jul 2016 11:45:02 +0300
 
 nginx (1.10.1-1) unstable; urgency=medium
 
