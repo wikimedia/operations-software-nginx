@@ -2,3 +2,4 @@ perl-use-dpkg-buildflags.patch
 0002-Make-sure-signature-stays-the-same-in-all-nginx-buil.patch
 0090-shift1.patch
 0091-shift2.patch
+0100-dynamic-tls-records.patch
