@@ -1,3 +1,11 @@
+nginx (1.11.2-1+wmf1) jessie; urgency=medium
+
+  * Based on debian 1.11.2-1~exp1
+  * Imported Cloudflare's dynamic TLS record sizing patch
+  * Imported unsigned shift fixups from nginx.org master branch (post-1.11.2)
+
+ -- Brandon Black <bblack@wikimedia.org>  Mon, 11 Jul 2016 20:44:42 +0000
+
 nginx (1.11.2-1~exp1) experimental; urgency=medium
 
   [ Christos Trochalakis ]
