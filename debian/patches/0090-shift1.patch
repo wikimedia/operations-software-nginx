@@ -1,0 +1,168 @@
+commit 6299f5e9149483251bbbcc8ad26cf29b6109e75c
+Author: Sergey Kandaurov <pluknet@nginx.com>
+Date:   Thu Jul 7 21:02:28 2016 +0300
+
+    Avoid left-shifting integers into the sign bit, which is undefined.
+    
+    Found with UndefinedBehaviorSanitizer.
+
+diff --git a/src/core/ngx_string.c b/src/core/ngx_string.c
+index cf665a4..7a73ef5 100644
+--- a/src/core/ngx_string.c
++++ b/src/core/ngx_string.c
+@@ -1563,7 +1563,7 @@ ngx_escape_uri(u_char *dst, u_char *src, size_t size, ngx_uint_t type)
+         n = 0;
+ 
+         while (size) {
+-            if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
++            if (escape[*src >> 5] & (1U << (*src & 0x1f))) {
+                 n++;
+             }
+             src++;
+@@ -1574,7 +1574,7 @@ ngx_escape_uri(u_char *dst, u_char *src, size_t size, ngx_uint_t type)
+     }
+ 
+     while (size) {
+-        if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
++        if (escape[*src >> 5] & (1U << (*src & 0x1f))) {
+             *dst++ = '%';
+             *dst++ = hex[*src >> 4];
+             *dst++ = hex[*src & 0xf];
+diff --git a/src/http/modules/ngx_http_log_module.c b/src/http/modules/ngx_http_log_module.c
+index df9424f..c42fb08 100644
+--- a/src/http/modules/ngx_http_log_module.c
++++ b/src/http/modules/ngx_http_log_module.c
+@@ -1000,7 +1000,7 @@ ngx_http_log_escape(u_char *dst, u_char *src, size_t size)
+         n = 0;
+ 
+         while (size) {
+-            if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
++            if (escape[*src >> 5] & (1U << (*src & 0x1f))) {
+                 n++;
+             }
+             src++;
+@@ -1011,7 +1011,7 @@ ngx_http_log_escape(u_char *dst, u_char *src, size_t size)
+     }
+ 
+     while (size) {
+-        if (escape[*src >> 5] & (1 << (*src & 0x1f))) {
++        if (escape[*src >> 5] & (1U << (*src & 0x1f))) {
+             *dst++ = '\\';
+             *dst++ = 'x';
+             *dst++ = hex[*src >> 4];
+diff --git a/src/http/modules/ngx_http_userid_filter_module.c b/src/http/modules/ngx_http_userid_filter_module.c
+index 1487c09..0dbacba 100644
+--- a/src/http/modules/ngx_http_userid_filter_module.c
++++ b/src/http/modules/ngx_http_userid_filter_module.c
+@@ -836,7 +836,7 @@ ngx_http_userid_init_worker(ngx_cycle_t *cycle)
+     ngx_gettimeofday(&tp);
+ 
+     /* use the most significant usec part that fits to 16 bits */
+-    start_value = ((tp.tv_usec / 20) << 16) | ngx_pid;
++    start_value = (((uint32_t) tp.tv_usec / 20) << 16) | ngx_pid;
+ 
+     return NGX_OK;
+ }
+diff --git a/src/http/ngx_http_parse.c b/src/http/ngx_http_parse.c
+index 59aa1fe..bd6c9c9 100644
+--- a/src/http/ngx_http_parse.c
++++ b/src/http/ngx_http_parse.c
+@@ -481,7 +481,7 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
+         /* check "/.", "//", "%", and "\" (Win32) in URI */
+         case sw_after_slash_in_uri:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 state = sw_check_uri;
+                 break;
+             }
+@@ -540,7 +540,7 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
+         /* check "/", "%" and "\" (Win32) in URI */
+         case sw_check_uri:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 break;
+             }
+ 
+@@ -626,7 +626,7 @@ ngx_http_parse_request_line(ngx_http_request_t *r, ngx_buf_t *b)
+         /* URI */
+         case sw_uri:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 break;
+             }
+ 
+@@ -1131,7 +1131,7 @@ ngx_http_parse_uri(ngx_http_request_t *r)
+         /* check "/.", "//", "%", and "\" (Win32) in URI */
+         case sw_after_slash_in_uri:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 state = sw_check_uri;
+                 break;
+             }
+@@ -1179,7 +1179,7 @@ ngx_http_parse_uri(ngx_http_request_t *r)
+         /* check "/", "%" and "\" (Win32) in URI */
+         case sw_check_uri:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 break;
+             }
+ 
+@@ -1228,7 +1228,7 @@ ngx_http_parse_uri(ngx_http_request_t *r)
+         /* URI */
+         case sw_uri:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 break;
+             }
+ 
+@@ -1289,7 +1289,7 @@ ngx_http_parse_complex_uri(ngx_http_request_t *r, ngx_uint_t merge_slashes)
+ 
+         case sw_usual:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 *u++ = ch;
+                 ch = *p++;
+                 break;
+@@ -1358,7 +1358,7 @@ ngx_http_parse_complex_uri(ngx_http_request_t *r, ngx_uint_t merge_slashes)
+ 
+         case sw_slash:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 state = sw_usual;
+                 *u++ = ch;
+                 ch = *p++;
+@@ -1401,7 +1401,7 @@ ngx_http_parse_complex_uri(ngx_http_request_t *r, ngx_uint_t merge_slashes)
+ 
+         case sw_dot:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 state = sw_usual;
+                 *u++ = ch;
+                 ch = *p++;
+@@ -1442,7 +1442,7 @@ ngx_http_parse_complex_uri(ngx_http_request_t *r, ngx_uint_t merge_slashes)
+ 
+         case sw_dot_dot:
+ 
+-            if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++            if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+                 state = sw_usual;
+                 *u++ = ch;
+                 ch = *p++;
+@@ -1836,7 +1836,7 @@ ngx_http_parse_unsafe_uri(ngx_http_request_t *r, ngx_str_t *uri,
+             continue;
+         }
+ 
+-        if (usual[ch >> 5] & (1 << (ch & 0x1f))) {
++        if (usual[ch >> 5] & (1U << (ch & 0x1f))) {
+             continue;
+         }
+ 

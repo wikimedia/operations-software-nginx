@@ -1,0 +1,32 @@
+commit 586ef968f98c379153fea0e7e80119b149380dc8
+Author: Sergey Kandaurov <pluknet@nginx.com>
+Date:   Thu Jul 7 21:03:21 2016 +0300
+
+    HTTP/2: avoid left-shifting signed integer into the sign bit.
+    
+    On non-aligned platforms, properly cast argument before left-shifting it in
+    ngx_http_v2_parse_uint32 that is used with u_char.  Otherwise it propagates
+    to int to hold the value and can step over the sign bit.  Usually, on known
+    compilers, this results in negation.  Furthermore, a subsequent store into a
+    wider type, that is ngx_uint_t on 64-bit platforms, results in sign-extension.
+    
+    In practice, this can be observed in debug log as a very large exclusive bit
+    value, when client sent PRIORITY frame with exclusive bit set:
+    
+    : *14 http2 PRIORITY frame sid:5 on 1 excl:8589934591 weight:17
+    
+    Found with UndefinedBehaviorSanitizer.
+
+diff --git a/src/http/v2/ngx_http_v2.h b/src/http/v2/ngx_http_v2.h
+index 9e738aa..d712d38 100644
+--- a/src/http/v2/ngx_http_v2.h
++++ b/src/http/v2/ngx_http_v2.h
+@@ -298,7 +298,7 @@ size_t ngx_http_v2_huff_encode(u_char *src, size_t len, u_char *dst,
+ 
+ #define ngx_http_v2_parse_uint16(p)  ((p)[0] << 8 | (p)[1])
+ #define ngx_http_v2_parse_uint32(p)                                           \
+-    ((p)[0] << 24 | (p)[1] << 16 | (p)[2] << 8 | (p)[3])
++    ((uint32_t) (p)[0] << 24 | (p)[1] << 16 | (p)[2] << 8 | (p)[3])
+ 
+ #endif
+ 
