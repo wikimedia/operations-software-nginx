@@ -1,3 +1,10 @@
+nginx (1.11.3-1+wmf1) jessie-wikimedia; urgency=medium
+
+  * Based on debian 1.11.3-1~exp1
+  * Imported Cloudflare's dynamic TLS record sizing patch
+
+ -- Brandon Black <bblack@wikimedia.org>  Wed, 03 Aug 2016 19:18:01 +0000
+
 nginx (1.11.3-1~exp1) unstable; urgency=medium
 
   [ Christos Trochalakis ]
