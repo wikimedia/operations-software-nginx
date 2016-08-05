@@ -1,3 +1,9 @@
+nginx (1.11.3-1+wmf2) jessie-wikimedia; urgency=medium
+
+  * Add $ssl_ecdhe_curve variable to ssl modules
+
+ -- Brandon Black <bblack@wikimedia.org>  Wed, 31 Aug 2016 12:46:36 +0000
+
 nginx (1.11.3-1+wmf1) jessie-wikimedia; urgency=medium
 
   * Based on debian 1.11.3-1~exp1
