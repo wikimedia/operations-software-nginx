@@ -1,0 +1,29 @@
+From af9e72533a69de3b8b7ed59be7be9b37203b5c82 Mon Sep 17 00:00:00 2001
+From: Sergey Kandaurov <pluknet@nginx.com>
+Date: Mon, 8 Aug 2016 13:44:49 +0300
+Subject: [PATCH] SSL: guarded SSL_R_NO_CIPHERS_PASSED not present in OpenSSL
+ 1.1.0.
+
+It was removed in OpenSSL 1.1.0 Beta 3 (pre-release 6).  It was
+not used since OpenSSL 1.0.1n and 1.0.2b.
+---
+ src/event/ngx_event_openssl.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index bb9a900..c40c198 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -2023,7 +2023,9 @@ ngx_ssl_connection_error(ngx_connection_t *c, int sslerr, ngx_err_t err,
+             || n == SSL_R_ERROR_IN_RECEIVED_CIPHER_LIST              /*  151 */
+             || n == SSL_R_EXCESSIVE_MESSAGE_SIZE                     /*  152 */
+             || n == SSL_R_LENGTH_MISMATCH                            /*  159 */
++#ifdef SSL_R_NO_CIPHERS_PASSED
+             || n == SSL_R_NO_CIPHERS_PASSED                          /*  182 */
++#endif
+             || n == SSL_R_NO_CIPHERS_SPECIFIED                       /*  183 */
+             || n == SSL_R_NO_COMPRESSION_SPECIFIED                   /*  187 */
+             || n == SSL_R_NO_SHARED_CIPHER                           /*  193 */
+-- 
+2.9.3
+

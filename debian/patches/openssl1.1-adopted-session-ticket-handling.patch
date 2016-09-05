@@ -1,0 +1,31 @@
+From 218c8d493f9f80a25fe382dbc414a2bcd7d0251b Mon Sep 17 00:00:00 2001
+From: Sergey Kandaurov <pluknet@nginx.com>
+Date: Mon, 22 Aug 2016 18:53:21 +0300
+Subject: [PATCH] SSL: adopted session ticket handling for OpenSSL 1.1.0.
+
+Return 1 in the SSL_CTX_set_tlsext_ticket_key_cb() callback function
+to indicate that a new session ticket is created, as per documentation.
+Until 1.1.0, OpenSSL didn't make a distinction between non-negative
+return values.
+
+See https://git.openssl.org/?p=openssl.git;a=commitdiff;h=5c753de for details.
+---
+ src/event/ngx_event_openssl.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 07e9085..45a8f8d 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -2986,7 +2986,7 @@ ngx_ssl_session_ticket_key_callback(ngx_ssl_conn_t *ssl_conn,
+                      ngx_ssl_session_ticket_md(), NULL);
+         ngx_memcpy(name, key[0].name, 16);
+ 
+-        return 0;
++        return 1;
+ 
+     } else {
+         /* decrypt session ticket */
+-- 
+2.9.3
+
