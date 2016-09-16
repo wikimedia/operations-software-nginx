@@ -165,8 +165,8 @@ static char *ngx_http_upstream(ngx_conf_t *cf, ngx_command_t *cmd, void *dummy);
 static char *ngx_http_upstream_server(ngx_conf_t *cf, ngx_command_t *cmd,
     void *conf);
 
-static ngx_addr_t *ngx_http_upstream_get_local(ngx_http_request_t *r,
-    ngx_http_upstream_local_t *local);
+static ngx_int_t ngx_http_upstream_set_local(ngx_http_request_t *r,
+  ngx_http_upstream_t *u, ngx_http_upstream_local_t *local);
 
 static void *ngx_http_upstream_create_main_conf(ngx_conf_t *cf);
 static char *ngx_http_upstream_init_main_conf(ngx_conf_t *cf, void *conf);
@@ -391,6 +391,10 @@ static ngx_http_variable_t  ngx_http_upstream_vars[] = {
       ngx_http_upstream_response_length_variable, 0,
       NGX_HTTP_VAR_NOCACHEABLE, 0 },
 
+    { ngx_string("upstream_bytes_received"), NULL,
+      ngx_http_upstream_response_length_variable, 1,
+      NGX_HTTP_VAR_NOCACHEABLE, 0 },
+
 #if (NGX_HTTP_CACHE)
 
     { ngx_string("upstream_cache_status"), NULL,
@@ -588,7 +592,10 @@ ngx_http_upstream_init_request(ngx_http_request_t *r)
         return;
     }
 
-    u->peer.local = ngx_http_upstream_get_local(r, u->conf->local);
+    if (ngx_http_upstream_set_local(r, u, u->conf->local) != NGX_OK) {
+        ngx_http_finalize_request(r, NGX_HTTP_INTERNAL_SERVER_ERROR);
+        return;
+    }
 
     clcf = ngx_http_get_module_loc_conf(r, ngx_http_core_module);
 
@@ -1219,8 +1226,12 @@ ngx_http_upstream_check_broken_connection(ngx_http_request_t *r,
 
 #if (NGX_HAVE_EPOLLRDHUP)
 
-    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && ev->pending_eof) {
+    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && ngx_use_epoll_rdhup) {
         socklen_t  len;
+
+        if (!ev->pending_eof) {
+            return;
+        }
 
         ev->eof = 1;
         c->error = 1;
@@ -2129,6 +2140,8 @@ ngx_http_upstream_process_header(ngx_http_request_t *r, ngx_http_upstream_t *u)
             return;
         }
 
+        u->state->bytes_received += n;
+
         u->buffer.last += n;
 
 #if 0
@@ -2635,6 +2648,7 @@ ngx_http_upstream_process_body_in_memory(ngx_http_request_t *r,
             return;
         }
 
+        u->state->bytes_received += n;
         u->state->response_length += n;
 
         if (u->input_filter(u->input_filter_ctx, n) == NGX_ERROR) {
@@ -3208,6 +3222,10 @@ ngx_http_upstream_process_upgraded(ngx_http_request_t *r,
                 do_write = 1;
                 b->last += n;
 
+                if (from_upstream) {
+                    u->state->bytes_received += n;
+                }
+
                 continue;
             }
 
@@ -3404,6 +3422,7 @@ ngx_http_upstream_process_non_buffered_request(ngx_http_request_t *r,
             }
 
             if (n > 0) {
+                u->state->bytes_received += n;
                 u->state->response_length += n;
 
                 if (u->input_filter(u->input_filter_ctx, n) == NGX_ERROR) {
@@ -4088,6 +4107,8 @@ ngx_http_upstream_finalize_request(ngx_http_request_t *r,
         u->state->response_time = ngx_current_msec - u->state->response_time;
 
         if (u->pipe && u->pipe->read_length) {
+            u->state->bytes_received += u->pipe->read_length
+                                        - u->pipe->preread_size;
             u->state->response_length = u->pipe->read_length;
         }
     }
@@ -5235,7 +5256,13 @@ ngx_http_upstream_response_length_variable(ngx_http_request_t *r,
     state = r->upstream_states->elts;
 
     for ( ;; ) {
-        p = ngx_sprintf(p, "%O", state[i].response_length);
+
+        if (data == 1) {
+            p = ngx_sprintf(p, "%O", state[i].bytes_received);
+
+        } else {
+            p = ngx_sprintf(p, "%O", state[i].response_length);
+        }
 
         if (++i == r->upstream_states->nelts) {
             break;
@@ -5785,7 +5812,7 @@ ngx_http_upstream_bind_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
 
     value = cf->args->elts;
 
-    if (ngx_strcmp(value[1].data, "off") == 0) {
+    if (cf->args->nelts == 2 && ngx_strcmp(value[1].data, "off") == 0) {
         *plocal = NULL;
         return NGX_CONF_OK;
     }
@@ -5815,34 +5842,52 @@ ngx_http_upstream_bind_set_slot(ngx_conf_t *cf, ngx_command_t *cmd,
 
         *local->value = cv;
 
-        return NGX_CONF_OK;
+    } else {
+        local->addr = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
+        if (local->addr == NULL) {
+            return NGX_CONF_ERROR;
+        }
+
+        rc = ngx_parse_addr_port(cf->pool, local->addr, value[1].data,
+                                 value[1].len);
+
+        switch (rc) {
+        case NGX_OK:
+            local->addr->name = value[1];
+            break;
+
+        case NGX_DECLINED:
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                               "invalid address \"%V\"", &value[1]);
+            /* fall through */
+
+        default:
+            return NGX_CONF_ERROR;
+        }
     }
 
-    local->addr = ngx_palloc(cf->pool, sizeof(ngx_addr_t));
-    if (local->addr == NULL) {
-        return NGX_CONF_ERROR;
+    if (cf->args->nelts > 2) {
+        if (ngx_strcmp(value[2].data, "transparent") == 0) {
+#if (NGX_HAVE_TRANSPARENT_PROXY)
+            local->transparent = 1;
+#else
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                               "transparent proxying is not supported "
+                               "on this platform, ignored");
+#endif
+        } else {
+            ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
+                               "invalid parameter \"%V\"", &value[2]);
+            return NGX_CONF_ERROR;
+        }
     }
 
-    rc = ngx_parse_addr(cf->pool, local->addr, value[1].data, value[1].len);
-
-    switch (rc) {
-    case NGX_OK:
-        local->addr->name = value[1];
-        return NGX_CONF_OK;
-
-    case NGX_DECLINED:
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                           "invalid address \"%V\"", &value[1]);
-        /* fall through */
-
-    default:
-        return NGX_CONF_ERROR;
-    }
+    return NGX_CONF_OK;
 }
 
 
-static ngx_addr_t *
-ngx_http_upstream_get_local(ngx_http_request_t *r,
+static ngx_int_t
+ngx_http_upstream_set_local(ngx_http_request_t *r, ngx_http_upstream_t *u,
     ngx_http_upstream_local_t *local)
 {
     ngx_int_t    rc;
@@ -5850,41 +5895,47 @@ ngx_http_upstream_get_local(ngx_http_request_t *r,
     ngx_addr_t  *addr;
 
     if (local == NULL) {
-        return NULL;
+        u->peer.local = NULL;
+        return NGX_OK;
     }
 
+#if (NGX_HAVE_TRANSPARENT_PROXY)
+    u->peer.transparent = local->transparent;
+#endif
+
     if (local->value == NULL) {
-        return local->addr;
+        u->peer.local = local->addr;
+        return NGX_OK;
     }
 
     if (ngx_http_complex_value(r, local->value, &val) != NGX_OK) {
-        return NULL;
+        return NGX_ERROR;
     }
 
     if (val.len == 0) {
-        return NULL;
+        return NGX_OK;
     }
 
     addr = ngx_palloc(r->pool, sizeof(ngx_addr_t));
     if (addr == NULL) {
-        return NULL;
+        return NGX_ERROR;
     }
 
-    rc = ngx_parse_addr(r->pool, addr, val.data, val.len);
+    rc = ngx_parse_addr_port(r->pool, addr, val.data, val.len);
+    if (rc == NGX_ERROR) {
+        return NGX_ERROR;
+    }
 
-    switch (rc) {
-    case NGX_OK:
-        addr->name = val;
-        return addr;
-
-    case NGX_DECLINED:
+    if (rc != NGX_OK) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "invalid local address \"%V\"", &val);
-        /* fall through */
-
-    default:
-        return NULL;
+        return NGX_OK;
     }
+
+    addr->name = val;
+    u->peer.local = addr;
+
+    return NGX_OK;
 }
 
 
