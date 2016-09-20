@@ -1,3 +1,13 @@
+nginx (1.11.4-1+wmf3) jessie-wikimedia; urgency=medium
+
+  * control: depend on libssl11-dev (WMF packaging)
+  * Adds local patch to fix mod_lua+OpenSSL-1.1
+  * Adds Cloudflare TLS dynamic record sizing patch
+  * Adds local patch for $ssl_ecdhe_curve variable
+  * Adds local patch for ssl_stapling_proxy config
+
+ -- Brandon Black <bblack@wikimedia.org>  Tue, 18 Oct 2016 12:41:20 +0000
+
 nginx (1.11.4-1~exp1) UNRELEASED; urgency=medium
 
   * New upstream release.
