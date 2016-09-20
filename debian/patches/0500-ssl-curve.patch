@@ -1,0 +1,72 @@
+diff --git a/src/event/ngx_event_openssl.c b/src/event/ngx_event_openssl.c
+index 529bef0..018c986 100644
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -8,6 +8,7 @@
+ #include <ngx_config.h>
+ #include <ngx_core.h>
+ #include <ngx_event.h>
++#include <openssl/objects.h>
+ 
+ 
+ #define NGX_SSL_PASSWORD_BUFFER_SIZE  4096
+@@ -3278,6 +3279,18 @@ ngx_ssl_get_cipher_name(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+ 
+ 
+ ngx_int_t
++ngx_ssl_get_ecdhe_curve_name(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
++{
++    const char *ciph = SSL_get_cipher_name(c->ssl->connection);
++    if (ciph && !strncmp("ECDHE-", ciph, 6))
++        s->data = (u_char *) OBJ_nid2sn(SSL_get_shared_curve(c->ssl->connection, 0));
++    else
++        s->data = (u_char *) OBJ_nid2sn(NID_undef);
++    return NGX_OK;
++}
++
++
++ngx_int_t
+ ngx_ssl_get_session_id(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+ {
+     u_char        *buf;
+diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
+index c6a85e9..b96dde2 100644
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -204,6 +204,8 @@ ngx_int_t ngx_ssl_get_protocol(ngx_connection_t *c, ngx_pool_t *pool,
+     ngx_str_t *s);
+ ngx_int_t ngx_ssl_get_cipher_name(ngx_connection_t *c, ngx_pool_t *pool,
+     ngx_str_t *s);
++ngx_int_t ngx_ssl_get_ecdhe_curve_name(ngx_connection_t *c, ngx_pool_t *pool,
++    ngx_str_t *s);
+ ngx_int_t ngx_ssl_get_session_id(ngx_connection_t *c, ngx_pool_t *pool,
+     ngx_str_t *s);
+ ngx_int_t ngx_ssl_get_session_reused(ngx_connection_t *c, ngx_pool_t *pool,
+diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
+index 2362632..2615e68 100644
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -311,6 +311,9 @@ static ngx_http_variable_t  ngx_http_ssl_vars[] = {
+     { ngx_string("ssl_cipher"), NULL, ngx_http_ssl_static_variable,
+       (uintptr_t) ngx_ssl_get_cipher_name, NGX_HTTP_VAR_CHANGEABLE, 0 },
+ 
++    { ngx_string("ssl_ecdhe_curve"), NULL, ngx_http_ssl_static_variable,
++      (uintptr_t) ngx_ssl_get_ecdhe_curve_name, NGX_HTTP_VAR_CHANGEABLE, 0 },
++
+     { ngx_string("ssl_session_id"), NULL, ngx_http_ssl_variable,
+       (uintptr_t) ngx_ssl_get_session_id, NGX_HTTP_VAR_CHANGEABLE, 0 },
+ 
+diff --git a/src/stream/ngx_stream_ssl_module.c b/src/stream/ngx_stream_ssl_module.c
+index 2661220..959e57f 100644
+--- a/src/stream/ngx_stream_ssl_module.c
++++ b/src/stream/ngx_stream_ssl_module.c
+@@ -177,6 +177,9 @@ static ngx_stream_variable_t  ngx_stream_ssl_vars[] = {
+     { ngx_string("ssl_cipher"), NULL, ngx_stream_ssl_static_variable,
+       (uintptr_t) ngx_ssl_get_cipher_name, NGX_STREAM_VAR_CHANGEABLE, 0 },
+ 
++    { ngx_string("ssl_ecdhe_curve"), NULL, ngx_stream_ssl_static_variable,
++      (uintptr_t) ngx_ssl_get_ecdhe_curve_name, NGX_STREAM_VAR_CHANGEABLE, 0 },
++
+     { ngx_string("ssl_session_id"), NULL, ngx_stream_ssl_variable,
+       (uintptr_t) ngx_ssl_get_session_id, NGX_STREAM_VAR_CHANGEABLE, 0 },
+ 
