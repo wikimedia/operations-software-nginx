@@ -1,3 +1,14 @@
+nginx (1.11.4-1+wmf12) jessie-wikimedia; urgency=medium
+
+  * (ema) build debug packages by hand
+  * upstream source -> master (unreleased "1.11.6", 2016-10-27)
+  * CVE-2016-1247 minimal fixup patch
+  * Various patches re-quilted
+  * Disable OpenSSL readahead as bugfix workaround for:
+    https://github.com/openssl/openssl/issues/1799
+
+ -- Brandon Black <bblack@wikimedia.org>  Sat, 29 Oct 2016 13:57:24 +0000
+
 nginx (1.11.4-1+wmf3) jessie-wikimedia; urgency=medium
 
   * control: depend on libssl11-dev (WMF packaging)
