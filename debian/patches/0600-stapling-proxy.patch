@@ -6,11 +6,9 @@ ssl_stapling_proxy http://proxy.example.com:8080;
 Should work with responder from certificate or fixed
 ssl_stapling_responder.
 
-diff --git a/src/event/ngx_event_openssl.h b/src/event/ngx_event_openssl.h
-index b96dde2..5587237 100644
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -165,7 +165,8 @@ ngx_int_t ngx_ssl_trusted_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -165,7 +165,8 @@
      ngx_str_t *cert, ngx_int_t depth);
  ngx_int_t ngx_ssl_crl(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *crl);
  ngx_int_t ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl,
@@ -20,11 +18,9 @@ index b96dde2..5587237 100644
  ngx_int_t ngx_ssl_stapling_resolver(ngx_conf_t *cf, ngx_ssl_t *ssl,
      ngx_resolver_t *resolver, ngx_msec_t resolver_timeout);
  RSA *ngx_ssl_rsa512_key_callback(ngx_ssl_conn_t *ssl_conn, int is_export,
-diff --git a/src/event/ngx_event_openssl_stapling.c b/src/event/ngx_event_openssl_stapling.c
-index 09fab76..06ff6e1 100644
 --- a/src/event/ngx_event_openssl_stapling.c
 +++ b/src/event/ngx_event_openssl_stapling.c
-@@ -25,6 +25,7 @@ typedef struct {
+@@ -25,6 +25,7 @@
      ngx_str_t                    host;
      ngx_str_t                    uri;
      in_port_t                    port;
@@ -32,7 +28,7 @@ index 09fab76..06ff6e1 100644
  
      SSL_CTX                     *ssl_ctx;
  
-@@ -51,6 +52,7 @@ struct ngx_ssl_ocsp_ctx_s {
+@@ -51,6 +52,7 @@
      ngx_str_t                    host;
      ngx_str_t                    uri;
      in_port_t                    port;
@@ -40,7 +36,7 @@ index 09fab76..06ff6e1 100644
  
      ngx_resolver_t              *resolver;
      ngx_msec_t                   resolver_timeout;
-@@ -84,13 +86,14 @@ struct ngx_ssl_ocsp_ctx_s {
+@@ -84,13 +86,14 @@
  
  
  static ngx_int_t ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
@@ -57,7 +53,7 @@ index 09fab76..06ff6e1 100644
  
  static int ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn,
      void *data);
-@@ -122,7 +125,7 @@ static u_char *ngx_ssl_ocsp_log_error(ngx_log_t *log, u_char *buf, size_t len);
+@@ -122,7 +125,7 @@
  
  ngx_int_t
  ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
@@ -66,7 +62,7 @@ index 09fab76..06ff6e1 100644
  {
      X509  *cert;
  
-@@ -130,8 +133,8 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+@@ -130,8 +133,8 @@
           cert;
           cert = X509_get_ex_data(cert, ngx_ssl_next_certificate_index))
      {
@@ -77,7 +73,7 @@ index 09fab76..06ff6e1 100644
          {
              return NGX_ERROR;
          }
-@@ -145,7 +148,8 @@ ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+@@ -145,7 +148,8 @@
  
  static ngx_int_t
  ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, X509 *cert,
@@ -87,7 +83,7 @@ index 09fab76..06ff6e1 100644
  {
      ngx_int_t            rc;
      ngx_pool_cleanup_t  *cln;
-@@ -194,7 +198,7 @@ ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, X509 *cert,
+@@ -194,7 +198,7 @@
          return NGX_ERROR;
      }
  
@@ -96,7 +92,7 @@ index 09fab76..06ff6e1 100644
  
      if (rc == NGX_DECLINED) {
          return NGX_OK;
-@@ -372,7 +376,7 @@ ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -372,7 +376,7 @@
  
  static ngx_int_t
  ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
@@ -105,7 +101,7 @@ index 09fab76..06ff6e1 100644
  {
      ngx_url_t                  u;
      char                      *s;
-@@ -419,7 +423,14 @@ ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -419,7 +423,14 @@
  
      ngx_memzero(&u, sizeof(ngx_url_t));
  
@@ -121,7 +117,7 @@ index 09fab76..06ff6e1 100644
      u.default_port = 80;
      u.uri_part = 1;
  
-@@ -449,9 +460,14 @@ ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -449,9 +460,14 @@
  
      staple->addrs = u.addrs;
      staple->host = u.host;
@@ -137,7 +133,7 @@ index 09fab76..06ff6e1 100644
      if (staple->uri.len == 0) {
          ngx_str_set(&staple->uri, "/");
      }
-@@ -552,6 +568,7 @@ ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple)
+@@ -552,6 +568,7 @@
      ctx->host = staple->host;
      ctx->uri = staple->uri;
      ctx->port = staple->port;
@@ -145,7 +141,7 @@ index 09fab76..06ff6e1 100644
      ctx->timeout = staple->timeout;
  
      ctx->resolver = staple->resolver;
-@@ -1254,9 +1271,12 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -1254,9 +1271,12 @@
  
      len = sizeof("GET ") - 1 + ctx->uri.len + sizeof("/") - 1
            + base64.len + 2 * escape + sizeof(" HTTP/1.0" CRLF) - 1
@@ -159,7 +155,7 @@ index 09fab76..06ff6e1 100644
      b = ngx_create_temp_buf(ctx->pool, len);
      if (b == NULL) {
          goto failed;
-@@ -1280,9 +1300,12 @@ ngx_ssl_ocsp_create_request(ngx_ssl_ocsp_ctx_t *ctx)
+@@ -1280,9 +1300,12 @@
      }
  
      p = ngx_cpymem(p, " HTTP/1.0" CRLF, sizeof(" HTTP/1.0" CRLF) - 1);
@@ -175,11 +171,9 @@ index 09fab76..06ff6e1 100644
  
      /* add "\r\n" at the header end */
      *p++ = CR; *p++ = LF;
-diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
-index 2615e68..a1735e5 100644
 --- a/src/http/modules/ngx_http_ssl_module.c
 +++ b/src/http/modules/ngx_http_ssl_module.c
-@@ -226,6 +226,13 @@ static ngx_command_t  ngx_http_ssl_commands[] = {
+@@ -226,6 +226,13 @@
        offsetof(ngx_http_ssl_srv_conf_t, stapling_responder),
        NULL },
  
@@ -193,7 +187,7 @@ index 2615e68..a1735e5 100644
      { ngx_string("ssl_stapling_verify"),
        NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_FLAG,
        ngx_conf_set_flag_slot,
-@@ -555,6 +562,7 @@ ngx_http_ssl_create_srv_conf(ngx_conf_t *cf)
+@@ -561,6 +568,7 @@
       *     sscf->shm_zone = NULL;
       *     sscf->stapling_file = { 0, NULL };
       *     sscf->stapling_responder = { 0, NULL };
@@ -201,7 +195,7 @@ index 2615e68..a1735e5 100644
       */
  
      sscf->enable = NGX_CONF_UNSET;
-@@ -640,6 +648,7 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+@@ -646,6 +654,7 @@
      ngx_conf_merge_str_value(conf->stapling_file, prev->stapling_file, "");
      ngx_conf_merge_str_value(conf->stapling_responder,
                           prev->stapling_responder, "");
@@ -209,7 +203,7 @@ index 2615e68..a1735e5 100644
  
      ngx_conf_merge_value(conf->dyn_rec_enable, prev->dyn_rec_enable, 0);
      ngx_conf_merge_msec_value(conf->dyn_rec_timeout, prev->dyn_rec_timeout,
-@@ -827,7 +836,8 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+@@ -833,7 +842,8 @@
      if (conf->stapling) {
  
          if (ngx_ssl_stapling(cf, &conf->ssl, &conf->stapling_file,
@@ -219,11 +213,9 @@ index 2615e68..a1735e5 100644
              != NGX_OK)
          {
              return NGX_CONF_ERROR;
-diff --git a/src/http/modules/ngx_http_ssl_module.h b/src/http/modules/ngx_http_ssl_module.h
-index 309ac00..fe4782a 100644
 --- a/src/http/modules/ngx_http_ssl_module.h
 +++ b/src/http/modules/ngx_http_ssl_module.h
-@@ -54,6 +54,7 @@ typedef struct {
+@@ -54,6 +54,7 @@
      ngx_flag_t                      stapling_verify;
      ngx_str_t                       stapling_file;
      ngx_str_t                       stapling_responder;
