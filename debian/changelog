@@ -1,3 +1,9 @@
+nginx (1.11.4-1+wmf13) jessie-wikimedia; urgency=medium
+
+  * Silence crits from SSLv3 handshakes - T148893
+
+ -- Brandon Black <bblack@wikimedia.org>  Mon, 31 Oct 2016 11:18:40 +0000
+
 nginx (1.11.4-1+wmf12) jessie-wikimedia; urgency=medium
 
   * (ema) build debug packages by hand
