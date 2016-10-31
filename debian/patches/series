@@ -5,4 +5,5 @@ perl-use-dpkg-buildflags.patch
 0100-dynamic-tls-records.patch
 0500-ssl-curve.patch
 0600-stapling-proxy.patch
+0660-version-too-low.patch
 9999-no-readahead.patch
