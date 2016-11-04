@@ -1,3 +1,13 @@
+nginx (1.11.4-1+wmf14) jessie-wikimedia; urgency=medium
+
+  * Bugfix for ECDHE curve logging (was reporting X25519 for
+    all resumed sessions with ECDHE ciphers)
+  * Remove readahead patch (fixed in OpenSSL package)
+  * Remove stapling proxy patch (to replace with:)
+  * Add stapling multi-cert patch
+
+ -- Brandon Black <bblack@wikimedia.org>  Wed, 09 Nov 2016 21:05:41 +0000
+
 nginx (1.11.4-1+wmf13) jessie-wikimedia; urgency=medium
 
   * Silence crits from SSLv3 handshakes - T148893
