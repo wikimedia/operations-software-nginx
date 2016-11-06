@@ -3,4 +3,5 @@
 0003-define_gnu_source-on-other-glibc-based-platforms.patch
 0100-dynamic-tls-records.patch
 0500-ssl-curve.patch
+0600-stapling-multi-file.patch
 0660-version-too-low.patch
