@@ -1,3 +1,11 @@
+commit c26c048aa84f7cc5398150c3a2de796086d27275
+Author: Brandon Black <bblack@wikimedia.org>
+Date:   Wed Nov 9 18:22:20 2016 +0000
+
+    XXX temp patch for curve to test
+    
+    Change-Id: I51f2cd62f66d058a773103d3317b531900fe495c
+
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
 @@ -8,6 +8,7 @@
@@ -8,7 +16,52 @@
  
  
  #define NGX_SSL_PASSWORD_BUFFER_SIZE  4096
-@@ -3307,6 +3308,18 @@
+@@ -1240,7 +1241,6 @@
+                 ngx_log_debug0(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                                "SSL reused session");
+             }
+-
+         } else {
+             ngx_log_debug0(NGX_LOG_DEBUG_EVENT, c->log, 0,
+                            "SSL no shared ciphers");
+@@ -2452,6 +2452,7 @@
+     ngx_ssl_sess_id_t        *sess_id;
+     ngx_ssl_session_cache_t  *cache;
+     u_char                    buf[NGX_SSL_MAX_SESSION_SIZE];
++    const char               *ciph;
+ 
+     len = i2d_SSL_SESSION(sess, NULL);
+ 
+@@ -2466,6 +2467,12 @@
+ 
+     c = ngx_ssl_get_connection(ssl_conn);
+ 
++    ciph = SSL_get_cipher_name(ssl_conn);
++    if (ciph && !strncmp("ECDHE-", ciph, 6))
++        c->ssl->curve_nid = SSL_get_shared_curve(c->ssl->connection, 0);
++    else
++        c->ssl->curve_nid = NID_undef;
++
+     ssl_ctx = c->ssl->session_ctx;
+     shm_zone = SSL_CTX_get_ex_data(ssl_ctx, ngx_ssl_session_cache_index);
+ 
+@@ -2557,6 +2564,7 @@
+     sess_id->id = id;
+     sess_id->len = len;
+     sess_id->session = cached_sess;
++    sess_id->curve_nid = c->ssl->curve_nid;
+ 
+     sess_id->expire = ngx_time() + SSL_CTX_get_timeout(ssl_ctx);
+ 
+@@ -2654,6 +2662,7 @@
+ 
+             if (sess_id->expire > ngx_time()) {
+                 ngx_memcpy(buf, sess_id->session, sess_id->len);
++                c->ssl->curve_nid = sess_id->curve_nid;
+ 
+                 ngx_shmtx_unlock(&shpool->mutex);
+ 
+@@ -3307,6 +3316,14 @@
      return NGX_OK;
  }
  
@@ -16,11 +69,7 @@
 +ngx_int_t
 +ngx_ssl_get_ecdhe_curve_name(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 +{
-+    const char *ciph = SSL_get_cipher_name(c->ssl->connection);
-+    if (ciph && !strncmp("ECDHE-", ciph, 6))
-+        s->data = (u_char *) OBJ_nid2sn(SSL_get_shared_curve(c->ssl->connection, 0));
-+    else
-+        s->data = (u_char *) OBJ_nid2sn(NID_undef);
++    s->data = (u_char *) OBJ_nid2sn(c->ssl->curve_nid);
 +    return NGX_OK;
 +}
 +
@@ -29,7 +78,23 @@
  ngx_ssl_get_session_id(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -204,6 +204,8 @@
+@@ -77,6 +77,7 @@
+     ngx_int_t                   last;
+     ngx_buf_t                  *buf;
+     size_t                      buffer_size;
++    int                         curve_nid;
+ 
+     ngx_connection_handler_pt   handler;
+ 
+@@ -113,6 +114,7 @@
+     u_char                     *session;
+     ngx_queue_t                 queue;
+     time_t                      expire;
++    int                         curve_nid;
+ #if (NGX_PTR_SIZE == 8)
+     void                       *stub;
+     u_char                      sess_id[32];
+@@ -204,6 +206,8 @@
      ngx_str_t *s);
  ngx_int_t ngx_ssl_get_cipher_name(ngx_connection_t *c, ngx_pool_t *pool,
      ngx_str_t *s);
