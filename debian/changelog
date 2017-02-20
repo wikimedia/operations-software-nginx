@@ -1,3 +1,15 @@
+nginx (1.11.10-1~exp1) experimental; urgency=medium
+
+  * New upstream release.
+  * Drop --with-ipv6 flag, IPv6 support is enabled automatically.
+  * Drop perl build flags patch, it is now handled upstream.
+  * Patch nginx-upstream-fair to build against nginx 1.11.6.
+  * Drop curve list patch, is is included upstream.
+  * Enable SSL Preread builtin module on nginx-full & nginx-extras.
+    (Closes: #854214)
+
+ -- Christos Trochalakis <ctrochalakis@debian.org>  Mon, 20 Feb 2017 11:53:45 +0200
+
 nginx (1.10.3-1) unstable; urgency=medium
 
   * New upstream release. (Closes: #855113)
