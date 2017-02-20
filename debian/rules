@@ -2,8 +2,12 @@
 export DH_VERBOSE=1
 
 export DEB_BUILD_MAINT_OPTIONS=hardening=+all
-debian_cflags:=$(shell dpkg-buildflags --get CFLAGS) $(shell dpkg-buildflags --get CPPFLAGS)
-debian_ldflags:=$(shell dpkg-buildflags --get LDFLAGS)
+debian_cflags:=$(shell dpkg-buildflags --get CFLAGS) -fPIC $(shell dpkg-buildflags --get CPPFLAGS)
+debian_ldflags:=$(shell dpkg-buildflags --get LDFLAGS) -fPIC
+
+# export necessary perl hardenging flags
+# see: src/http/modules/perl/Makefile.PL
+DEBIAN_NGINX_PERL_LDFLAGS:=$(shell DEB_BUILD_MAINT_OPTIONS=hardening=+all,-pie dpkg-buildflags --get LDFLAGS)
 
 FLAVOURS := full light extras
 DYN_MODS := \
