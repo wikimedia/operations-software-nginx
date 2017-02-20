@@ -37,7 +37,7 @@ ngx_cycle_t *
 ngx_init_cycle(ngx_cycle_t *old_cycle)
 {
     void                *rv;
-    char               **senv, **env;
+    char               **senv;
     ngx_uint_t           i, n;
     ngx_log_t           *log;
     ngx_time_t          *tp;
@@ -131,6 +131,9 @@ ngx_init_cycle(ngx_cycle_t *old_cycle)
         ngx_destroy_pool(pool);
         return NULL;
     }
+
+    ngx_rbtree_init(&cycle->config_dump_rbtree, &cycle->config_dump_sentinel,
+                    ngx_str_rbtree_insert_value);
 
     if (old_cycle->open_files.part.nelts) {
         n = old_cycle->open_files.part.nelts;
@@ -747,19 +750,8 @@ old_shm_zone_done:
 
     if (ngx_process == NGX_PROCESS_MASTER || ngx_is_init_cycle(old_cycle)) {
 
-        /*
-         * perl_destruct() frees environ, if it is not the same as it was at
-         * perl_construct() time, therefore we save the previous cycle
-         * environment before ngx_conf_parse() where it will be changed.
-         */
-
-        env = environ;
-        environ = senv;
-
         ngx_destroy_pool(old_cycle->pool);
         cycle->old_cycle = NULL;
-
-        environ = env;
 
         return cycle;
     }

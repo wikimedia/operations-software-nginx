@@ -110,6 +110,10 @@ ngx_http_header_t  ngx_http_headers_in[] = {
                  offsetof(ngx_http_headers_in_t, content_length),
                  ngx_http_process_unique_header_line },
 
+    { ngx_string("Content-Range"),
+                 offsetof(ngx_http_headers_in_t, content_range),
+                 ngx_http_process_unique_header_line },
+
     { ngx_string("Content-Type"),
                  offsetof(ngx_http_headers_in_t, content_type),
                  ngx_http_process_header_line },
@@ -879,6 +883,8 @@ ngx_http_ssl_servername(ngx_ssl_conn_t *ssl_conn, int *ad, void *arg)
     ngx_set_connection_log(c, clcf->error_log);
 
     sscf = ngx_http_get_module_srv_conf(hc->conf_ctx, ngx_http_ssl_module);
+
+    c->ssl->buffer_size = sscf->buffer_size;
 
     if (sscf->ssl.ctx) {
         SSL_set_SSL_CTX(ssl_conn, sscf->ssl.ctx);
@@ -2064,7 +2070,7 @@ ngx_http_set_virtual_server(ngx_http_request_t *r, ngx_str_t *host)
         if (sscf->verify) {
             ngx_log_error(NGX_LOG_INFO, r->connection->log, 0,
                           "client attempted to request the server name "
-                          "different from that one was negotiated");
+                          "different from the one that was negotiated");
             ngx_http_finalize_request(r, NGX_HTTP_MISDIRECTED_REQUEST);
             return NGX_ERROR;
         }
@@ -2752,8 +2758,12 @@ ngx_http_test_reading(ngx_http_request_t *r)
 
 #if (NGX_HAVE_EPOLLRDHUP)
 
-    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && rev->pending_eof) {
+    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT) && ngx_use_epoll_rdhup) {
         socklen_t  len;
+
+        if (!rev->pending_eof) {
+            return;
+        }
 
         rev->eof = 1;
         c->error = 1;

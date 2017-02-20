@@ -350,19 +350,17 @@ ngx_http_script_compile(ngx_http_script_compile_t *sc)
                 goto invalid_variable;
             }
 
-#if (NGX_PCRE)
-            {
-            ngx_uint_t  n;
-
             if (sc->source->data[i] >= '1' && sc->source->data[i] <= '9') {
+#if (NGX_PCRE)
+                ngx_uint_t  n;
 
                 n = sc->source->data[i] - '0';
 
-                if (sc->captures_mask & (1 << n)) {
+                if (sc->captures_mask & ((ngx_uint_t) 1 << n)) {
                     sc->dup_capture = 1;
                 }
 
-                sc->captures_mask |= 1 << n;
+                sc->captures_mask |= (ngx_uint_t) 1 << n;
 
                 if (ngx_http_script_add_capture_code(sc, n) != NGX_OK) {
                     return NGX_ERROR;
@@ -371,9 +369,13 @@ ngx_http_script_compile(ngx_http_script_compile_t *sc)
                 i++;
 
                 continue;
-            }
-            }
+#else
+                ngx_conf_log_error(NGX_LOG_EMERG, sc->cf, 0,
+                                   "using variable \"$%c\" requires "
+                                   "PCRE library", sc->source->data[i]);
+                return NGX_ERROR;
 #endif
+            }
 
             if (sc->source->data[i] == '{') {
                 bracket = 1;

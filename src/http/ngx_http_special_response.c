@@ -25,6 +25,13 @@ static u_char ngx_http_error_full_tail[] =
 ;
 
 
+static u_char ngx_http_error_build_tail[] =
+"<hr><center>" NGINX_VER_BUILD "</center>" CRLF
+"</body>" CRLF
+"</html>" CRLF
+;
+
+
 static u_char ngx_http_error_tail[] =
 "<hr><center>nginx</center>" CRLF
 "</body>" CRLF
@@ -473,7 +480,6 @@ ngx_http_special_response_handler(ngx_http_request_t *r, ngx_int_t error)
             case NGX_HTTPS_NO_CERT:
             case NGX_HTTP_REQUEST_HEADER_TOO_LARGE:
                 r->err_status = NGX_HTTP_BAD_REQUEST;
-                break;
         }
 
     } else {
@@ -629,9 +635,13 @@ ngx_http_send_special_response(ngx_http_request_t *r,
     ngx_uint_t    msie_padding;
     ngx_chain_t   out[3];
 
-    if (clcf->server_tokens) {
+    if (clcf->server_tokens == NGX_HTTP_SERVER_TOKENS_ON) {
         len = sizeof(ngx_http_error_full_tail) - 1;
         tail = ngx_http_error_full_tail;
+
+    } else if (clcf->server_tokens == NGX_HTTP_SERVER_TOKENS_BUILD) {
+        len = sizeof(ngx_http_error_build_tail) - 1;
+        tail = ngx_http_error_build_tail;
 
     } else {
         len = sizeof(ngx_http_error_tail) - 1;
@@ -792,7 +802,7 @@ ngx_http_send_refresh(ngx_http_request_t *r)
     b->last = ngx_cpymem(p, ngx_http_msie_refresh_tail,
                          sizeof(ngx_http_msie_refresh_tail) - 1);
 
-    b->last_buf = 1;
+    b->last_buf = (r == r->main) ? 1 : 0;
     b->last_in_chain = 1;
 
     out.buf = b;
