@@ -1,3 +1,20 @@
+nginx (1.11.10-1+wmf1) jessie-wikimedia; urgency=medium
+
+    * Rebased on debian experimental branch @ 1.11.10-1~exp2
+    * Added patch bringing upstream source to 1.11.13
+    * Forward-ported existing wmf-1.11.4 work onto 1.11.13:
+      * WMF-specific debian/patches
+        * Cloudflare's Dynamic TLS Records
+        * Logging of TLS-negotiated ECDHE Curve
+        * Multiple certificate/file support for ssl_stapling_file
+        * Make OpenSSL "Version too low" log msgs non-critical
+      * WMF-specific fixups to other debian files:
+        * Add/fix build patches to the echo and lua modules
+        * depend on wmf libssl11-dev for building
+        * create nginx-{full,light,extras}-dbg by hand
+
+ -- Brandon Black <bblack@wikimedia.org>  Tue, 25 Apr 2017 11:05:40 +0000
+
 nginx (1.11.10-1~exp2) UNRELEASED; urgency=medium
 
   * Configure build flags to work well with other arches and downstreams.
