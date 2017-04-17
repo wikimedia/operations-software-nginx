@@ -1,0 +1,336 @@
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -347,30 +347,39 @@
+ 
+ ngx_int_t
+ ngx_ssl_certificates(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_array_t *certs,
+-    ngx_array_t *keys, ngx_array_t *passwords)
++    ngx_array_t *keys, ngx_array_t *passwords, ngx_flag_t stapling,
++    ngx_array_t *stapling_files, ngx_str_t *stapling_responder,
++    ngx_uint_t stapling_verify)
+ {
+-    ngx_str_t   *cert, *key;
++    ngx_str_t   *cert, *key, *staple_file;
+     ngx_uint_t   i;
+ 
+     cert = certs->elts;
+     key = keys->elts;
++    staple_file = stapling_files ? stapling_files->elts : NULL;
+ 
+     for (i = 0; i < certs->nelts; i++) {
+-
+-        if (ngx_ssl_certificate(cf, ssl, &cert[i], &key[i], passwords)
+-            != NGX_OK)
++        if (ngx_ssl_certificate(cf, ssl, &cert[i], &key[i], passwords,
++                                stapling, staple_file ? &staple_file[i] : NULL,
++                                stapling_responder, stapling_verify) != NGX_OK)
+         {
+             return NGX_ERROR;
+         }
+     }
+ 
++    if (stapling) {
++        SSL_CTX_set_tlsext_status_cb(ssl->ctx,
++                                     ngx_ssl_certificate_status_callback);
++    }
++
+     return NGX_OK;
+ }
+ 
+-
+ ngx_int_t
+ ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *cert,
+-    ngx_str_t *key, ngx_array_t *passwords)
++    ngx_str_t *key, ngx_array_t *passwords, ngx_flag_t stapling,
++    ngx_str_t* staple_file, ngx_str_t* stapling_responder,
++    ngx_uint_t stapling_verify)
+ {
+     BIO         *bio;
+     X509        *x509;
+@@ -430,6 +439,15 @@
+         return NGX_ERROR;
+     }
+ 
++    if (stapling) {
++        if (ngx_ssl_stapling_certificate(cf, ssl, x509, staple_file,
++                                         stapling_responder, stapling_verify)
++            != NGX_OK)
++        {
++            return NGX_ERROR;
++        }
++    }
++
+     if (SSL_CTX_set_ex_data(ssl->ctx, ngx_ssl_certificate_index, x509)
+         == 0)
+     {
+--- a/src/event/ngx_event_openssl.h
++++ b/src/event/ngx_event_openssl.h
+@@ -157,9 +157,13 @@
+ ngx_int_t ngx_ssl_init(ngx_log_t *log);
+ ngx_int_t ngx_ssl_create(ngx_ssl_t *ssl, ngx_uint_t protocols, void *data);
+ ngx_int_t ngx_ssl_certificates(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_array_t *certs, ngx_array_t *keys, ngx_array_t *passwords);
++    ngx_array_t *certs, ngx_array_t *keys, ngx_array_t *passwords,
++    ngx_flag_t stapling, ngx_array_t *stapling_files,
++    ngx_str_t *stapling_responder, ngx_uint_t stapling_verify);
+ ngx_int_t ngx_ssl_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *cert, ngx_str_t *key, ngx_array_t *passwords);
++    ngx_str_t *cert, ngx_str_t *key, ngx_array_t *passwords,
++    ngx_flag_t stapling, ngx_str_t* staple_file,
++    ngx_str_t* stapling_responder, ngx_uint_t stapling_verify);
+ ngx_int_t ngx_ssl_ciphers(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *ciphers,
+     ngx_uint_t prefer_server_ciphers);
+ ngx_int_t ngx_ssl_client_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -167,10 +171,12 @@
+ ngx_int_t ngx_ssl_trusted_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_str_t *cert, ngx_int_t depth);
+ ngx_int_t ngx_ssl_crl(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *crl);
+-ngx_int_t ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    ngx_str_t *file, ngx_str_t *responder, ngx_uint_t verify);
++ngx_int_t ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
++    X509 *cert, ngx_str_t *file, ngx_str_t *responder, ngx_uint_t verify);
+ ngx_int_t ngx_ssl_stapling_resolver(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_resolver_t *resolver, ngx_msec_t resolver_timeout);
++int ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn,
++    void *data);
+ RSA *ngx_ssl_rsa512_key_callback(ngx_ssl_conn_t *ssl_conn, int is_export,
+     int key_length);
+ ngx_array_t *ngx_ssl_read_password_file(ngx_conf_t *cf, ngx_str_t *file);
+--- a/src/event/ngx_event_openssl_stapling.c
++++ b/src/event/ngx_event_openssl_stapling.c
+@@ -87,8 +87,6 @@
+ };
+ 
+ 
+-static ngx_int_t ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl,
+-    X509 *cert, ngx_str_t *file, ngx_str_t *responder, ngx_uint_t verify);
+ static ngx_int_t ngx_ssl_stapling_file(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_ssl_stapling_t *staple, ngx_str_t *file);
+ static ngx_int_t ngx_ssl_stapling_issuer(ngx_conf_t *cf, ngx_ssl_t *ssl,
+@@ -96,8 +94,6 @@
+ static ngx_int_t ngx_ssl_stapling_responder(ngx_conf_t *cf, ngx_ssl_t *ssl,
+     ngx_ssl_stapling_t *staple, ngx_str_t *responder);
+ 
+-static int ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn,
+-    void *data);
+ static void ngx_ssl_stapling_update(ngx_ssl_stapling_t *staple);
+ static void ngx_ssl_stapling_ocsp_handler(ngx_ssl_ocsp_ctx_t *ctx);
+ 
+@@ -125,29 +121,6 @@
+ 
+ 
+ ngx_int_t
+-ngx_ssl_stapling(ngx_conf_t *cf, ngx_ssl_t *ssl, ngx_str_t *file,
+-    ngx_str_t *responder, ngx_uint_t verify)
+-{
+-    X509  *cert;
+-
+-    for (cert = SSL_CTX_get_ex_data(ssl->ctx, ngx_ssl_certificate_index);
+-         cert;
+-         cert = X509_get_ex_data(cert, ngx_ssl_next_certificate_index))
+-    {
+-        if (ngx_ssl_stapling_certificate(cf, ssl, cert, file, responder, verify)
+-            != NGX_OK)
+-        {
+-            return NGX_ERROR;
+-        }
+-    }
+-
+-    SSL_CTX_set_tlsext_status_cb(ssl->ctx, ngx_ssl_certificate_status_callback);
+-
+-    return NGX_OK;
+-}
+-
+-
+-static ngx_int_t
+ ngx_ssl_stapling_certificate(ngx_conf_t *cf, ngx_ssl_t *ssl, X509 *cert,
+     ngx_str_t *file, ngx_str_t *responder, ngx_uint_t verify)
+ {
+@@ -494,7 +467,7 @@
+ }
+ 
+ 
+-static int
++int
+ ngx_ssl_certificate_status_callback(ngx_ssl_conn_t *ssl_conn, void *data)
+ {
+     int                  rc;
+--- a/src/http/modules/ngx_http_proxy_module.c
++++ b/src/http/modules/ngx_http_proxy_module.c
+@@ -4351,7 +4351,8 @@
+         }
+ 
+         if (ngx_ssl_certificate(cf, plcf->upstream.ssl, &plcf->ssl_certificate,
+-                                &plcf->ssl_certificate_key, plcf->ssl_passwords)
++                                &plcf->ssl_certificate_key, plcf->ssl_passwords,
++                                0, NULL, NULL, 0)
+             != NGX_OK)
+         {
+             return NGX_ERROR;
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -214,9 +214,9 @@
+ 
+     { ngx_string("ssl_stapling_file"),
+       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+-      ngx_conf_set_str_slot,
++      ngx_conf_set_str_array_slot,
+       NGX_HTTP_SRV_CONF_OFFSET,
+-      offsetof(ngx_http_ssl_srv_conf_t, stapling_file),
++      offsetof(ngx_http_ssl_srv_conf_t, stapling_files),
+       NULL },
+ 
+     { ngx_string("ssl_stapling_responder"),
+@@ -574,7 +574,6 @@
+      *     sscf->crl = { 0, NULL };
+      *     sscf->ciphers = { 0, NULL };
+      *     sscf->shm_zone = NULL;
+-     *     sscf->stapling_file = { 0, NULL };
+      *     sscf->stapling_responder = { 0, NULL };
+      */
+ 
+@@ -591,6 +590,7 @@
+     sscf->session_tickets = NGX_CONF_UNSET;
+     sscf->session_ticket_keys = NGX_CONF_UNSET_PTR;
+     sscf->stapling = NGX_CONF_UNSET;
++    sscf->stapling_files = NGX_CONF_UNSET_PTR;
+     sscf->stapling_verify = NGX_CONF_UNSET;
+     sscf->dyn_rec_enable = NGX_CONF_UNSET;
+     sscf->dyn_rec_timeout = NGX_CONF_UNSET_MSEC;
+@@ -607,6 +607,8 @@
+ {
+     ngx_http_ssl_srv_conf_t *prev = parent;
+     ngx_http_ssl_srv_conf_t *conf = child;
++    ngx_str_t *temp_str;
++    ngx_uint_t i;
+ 
+     ngx_pool_cleanup_t  *cln;
+ 
+@@ -658,7 +660,7 @@
+ 
+     ngx_conf_merge_value(conf->stapling, prev->stapling, 0);
+     ngx_conf_merge_value(conf->stapling_verify, prev->stapling_verify, 0);
+-    ngx_conf_merge_str_value(conf->stapling_file, prev->stapling_file, "");
++    ngx_conf_merge_ptr_value(conf->stapling_files, prev->stapling_files, NULL);
+     ngx_conf_merge_str_value(conf->stapling_responder,
+                          prev->stapling_responder, "");
+ 
+@@ -707,6 +709,30 @@
+             return NGX_CONF_ERROR;
+         }
+ 
++        if (conf->stapling && conf->stapling_files
++            && conf->stapling_files->nelts < conf->certificates->nelts) {
++            ngx_log_error(NGX_LOG_EMERG, cf->log, 0,
++                          "no \"ssl_stapling_file\" is defined "
++                          "for certificate \"%V\" and "
++                          "the \"ssl\" directive in %s:%ui",
++                          ((ngx_str_t *) conf->certificates->elts)
++                          + conf->certificates->nelts - 1,
++                          conf->file, conf->line);
++            /*
++             * Should "return NGX_CONF_ERROR;" here universally, but instead
++             * this patch allows a singular "ssl_stapling_file" to apply to all
++             * certs (but still with the log output above), preserving existing
++             * beahvior while config files are migrated.
++             */
++            if (conf->stapling_files->nelts > 1)
++                return NGX_CONF_ERROR;
++            i = conf->certificates->nelts;
++            while (--i) {
++                temp_str = ngx_array_push(conf->stapling_files);
++                *temp_str = *((ngx_str_t*)conf->stapling_files->elts);
++            }
++        }
++
+     } else {
+ 
+         if (conf->certificates == NULL) {
+@@ -761,7 +787,9 @@
+     cln->data = &conf->ssl;
+ 
+     if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
+-                             conf->certificate_keys, conf->passwords)
++                             conf->certificate_keys, conf->passwords,
++                             conf->stapling, conf->stapling_files,
++                             &conf->stapling_responder, conf->stapling_verify)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+@@ -845,17 +873,6 @@
+         return NGX_CONF_ERROR;
+     }
+ 
+-    if (conf->stapling) {
+-
+-        if (ngx_ssl_stapling(cf, &conf->ssl, &conf->stapling_file,
+-                             &conf->stapling_responder, conf->stapling_verify)
+-            != NGX_OK)
+-        {
+-            return NGX_CONF_ERROR;
+-        }
+-
+-    }
+-
+     if (conf->dyn_rec_enable) {
+         conf->ssl.dyn_rec.timeout = conf->dyn_rec_timeout;
+         conf->ssl.dyn_rec.threshold = conf->dyn_rec_threshold;
+--- a/src/http/modules/ngx_http_ssl_module.h
++++ b/src/http/modules/ngx_http_ssl_module.h
+@@ -52,7 +52,7 @@
+ 
+     ngx_flag_t                      stapling;
+     ngx_flag_t                      stapling_verify;
+-    ngx_str_t                       stapling_file;
++    ngx_array_t                    *stapling_files;
+     ngx_str_t                       stapling_responder;
+ 
+     u_char                         *file;
+--- a/src/http/modules/ngx_http_uwsgi_module.c
++++ b/src/http/modules/ngx_http_uwsgi_module.c
+@@ -2354,7 +2354,8 @@
+         }
+ 
+         if (ngx_ssl_certificate(cf, uwcf->upstream.ssl, &uwcf->ssl_certificate,
+-                                &uwcf->ssl_certificate_key, uwcf->ssl_passwords)
++                                &uwcf->ssl_certificate_key, uwcf->ssl_passwords,
++                                0, NULL, NULL, 0)
+             != NGX_OK)
+         {
+             return NGX_ERROR;
+--- a/src/mail/ngx_mail_ssl_module.c
++++ b/src/mail/ngx_mail_ssl_module.c
+@@ -387,7 +387,8 @@
+     cln->data = &conf->ssl;
+ 
+     if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
+-                             conf->certificate_keys, conf->passwords)
++                             conf->certificate_keys, conf->passwords,
++                             0, NULL, NULL, 0)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
+--- a/src/stream/ngx_stream_proxy_module.c
++++ b/src/stream/ngx_stream_proxy_module.c
+@@ -1983,7 +1983,8 @@
+         }
+ 
+         if (ngx_ssl_certificate(cf, pscf->ssl, &pscf->ssl_certificate,
+-                                &pscf->ssl_certificate_key, pscf->ssl_passwords)
++                                &pscf->ssl_certificate_key, pscf->ssl_passwords,
++                                0, NULL, NULL, 0)
+             != NGX_OK)
+         {
+             return NGX_ERROR;
+--- a/src/stream/ngx_stream_ssl_module.c
++++ b/src/stream/ngx_stream_ssl_module.c
+@@ -601,7 +601,8 @@
+     cln->data = &conf->ssl;
+ 
+     if (ngx_ssl_certificates(cf, &conf->ssl, conf->certificates,
+-                             conf->certificate_keys, conf->passwords)
++                             conf->certificate_keys, conf->passwords,
++                             0, NULL, NULL, 0)
+         != NGX_OK)
+     {
+         return NGX_CONF_ERROR;
