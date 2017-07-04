@@ -1,3 +1,9 @@
+nginx (1.11.10-1+wmf2) jessie-wikimedia; urgency=medium
+
+  * Build-Depend on libssl11-dev | libssl-dev for jessie and stretch compat
+
+ -- Filippo Giunchedi <filippo@wikimedia.org>  Tue, 04 Jul 2017 16:56:16 +0200
+
 nginx (1.11.10-1+wmf1) jessie-wikimedia; urgency=medium
 
     * Rebased on debian experimental branch @ 1.11.10-1~exp2
