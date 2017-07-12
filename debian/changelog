@@ -1,3 +1,9 @@
+nginx (1.11.10-1+wmf3) jessie-wikimedia; urgency=medium
+
+  * CVE-2017-7529
+
+ -- Moritz Muehlenhoff <mmuhlenhoff@wikimedia.org>  Wed, 12 Jul 2017 09:33:21 +0200
+
 nginx (1.11.10-1+wmf2) jessie-wikimedia; urgency=medium
 
   * Build-Depend on libssl11-dev | libssl-dev for jessie and stretch compat
