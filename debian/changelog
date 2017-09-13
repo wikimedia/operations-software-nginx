@@ -1,3 +1,14 @@
+nginx (1.13.5-1+wmf1) stretch-wikimedia; urgency=high
+
+  * Rebase on debian master @ 1.13.5-1
+  * Forward-port existing WMF patches:
+    * Cloudflare's Dynamic TLS Records
+    * Logging of TLS-negotiated ECDHE Curve
+    * Multiple certificate/file support for ssl_stapling_file
+    * Make OpenSSL "Version too low" log msgs non-critical
+
+ -- Brandon Black <bblack@wikimedia.org>  Wed, 27 Sep 2017 16:47:21 +0000
+
 nginx (1.13.5-1) unstable; urgency=medium
 
   * New upstream version 1.13.5
