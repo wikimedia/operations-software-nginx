@@ -1,0 +1,10 @@
+--- a/src/event/ngx_event_openssl.c
++++ b/src/event/ngx_event_openssl.c
+@@ -2152,6 +2152,7 @@
+ #ifdef SSL_R_INAPPROPRIATE_FALLBACK
+             || n == SSL_R_INAPPROPRIATE_FALLBACK                     /*  373 */
+ #endif
++            || n == SSL_R_VERSION_TOO_LOW                            /*  396 */
+             || n == 1000 /* SSL_R_SSLV3_ALERT_CLOSE_NOTIFY */
+ #ifdef SSL_R_SSLV3_ALERT_UNEXPECTED_MESSAGE
+             || n == SSL_R_SSLV3_ALERT_UNEXPECTED_MESSAGE             /* 1010 */
