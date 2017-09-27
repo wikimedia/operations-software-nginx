@@ -1,3 +1,12 @@
+nginx (1.13.5-1+wmf1~jessie1) jessie-wikimedia; urgency=high
+
+  * Jessie-specific deviations from our stretch build:
+    * Work with debhelper 9
+    * Change ssl dep from libssl-dev to libssl11-dev
+    * Manual -dbg packages
+
+ -- Brandon Black <bblack@wikimedia.org>  Wed, 27 Sep 2017 16:50:15 +0000
+
 nginx (1.13.5-1+wmf1) stretch-wikimedia; urgency=high
 
   * Rebase on debian master @ 1.13.5-1
