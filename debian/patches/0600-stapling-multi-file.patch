@@ -312,7 +312,7 @@
          return NGX_CONF_ERROR;
 --- a/src/stream/ngx_stream_proxy_module.c
 +++ b/src/stream/ngx_stream_proxy_module.c
-@@ -1971,7 +1971,8 @@
+@@ -1979,7 +1979,8 @@
          }
  
          if (ngx_ssl_certificate(cf, pscf->ssl, &pscf->ssl_certificate,
