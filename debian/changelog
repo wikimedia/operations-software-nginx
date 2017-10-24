@@ -1,13 +1,17 @@
-nginx (1.13.5-1+wmf1) stretch-wikimedia; urgency=high
+nginx (1.13.6-2) unstable; urgency=medium
 
-  * Rebase on debian master @ 1.13.5-1
-  * Forward-port existing WMF patches:
-    * Cloudflare's Dynamic TLS Records
-    * Logging of TLS-negotiated ECDHE Curve
-    * Multiple certificate/file support for ssl_stapling_file
-    * Make OpenSSL "Version too low" log msgs non-critical
+  * rtmp: Ship docs & examples (Closes: #878368)
 
- -- Brandon Black <bblack@wikimedia.org>  Wed, 27 Sep 2017 16:47:21 +0000
+ -- Christos Trochalakis <ctrochalakis@debian.org>  Fri, 13 Oct 2017 12:59:28 +0300
+
+nginx (1.13.6-1) unstable; urgency=medium
+
+  * New upstream version
+  * Normalize module paths in packaging repository
+  * Bump Standards-Version, no changes needed
+  * Drop dh-systemd dependency since we depend on debhelper >= 10
+
+ -- Christos Trochalakis <ctrochalakis@debian.org>  Thu, 12 Oct 2017 10:37:29 +0300
 
 nginx (1.13.5-1) unstable; urgency=medium
 
