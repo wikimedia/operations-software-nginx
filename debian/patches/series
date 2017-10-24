@@ -4,3 +4,4 @@
 0500-ssl-curve.patch
 0600-stapling-multi-file.patch
 0660-version-too-low.patch
+0700-do-wait-shutdown.patch
