@@ -1,0 +1,77 @@
+diff --git a/src/http/modules/ngx_http_ssl_module.c b/src/http/modules/ngx_http_ssl_module.c
+index de72e0cd2..fa26b3232 100644
+--- a/src/http/modules/ngx_http_ssl_module.c
++++ b/src/http/modules/ngx_http_ssl_module.c
+@@ -269,6 +269,13 @@ static ngx_command_t  ngx_http_ssl_commands[] = {
+       offsetof(ngx_http_ssl_srv_conf_t, dyn_rec_threshold),
+       NULL },
+ 
++    { ngx_string("ssl_do_wait_shutdown"),
++      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_FLAG,
++      ngx_conf_set_flag_slot,
++      NGX_HTTP_SRV_CONF_OFFSET,
++      offsetof(ngx_http_ssl_srv_conf_t, do_wait_shutdown),
++      NULL },
++
+       ngx_null_command
+ };
+ 
+@@ -602,6 +609,7 @@ ngx_http_ssl_create_srv_conf(ngx_conf_t *cf)
+     sscf->dyn_rec_size_lo = NGX_CONF_UNSET_SIZE;
+     sscf->dyn_rec_size_hi = NGX_CONF_UNSET_SIZE;
+     sscf->dyn_rec_threshold = NGX_CONF_UNSET_UINT;
++    sscf->do_wait_shutdown = NGX_CONF_UNSET;
+ 
+     return sscf;
+ }
+@@ -683,6 +691,8 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *cf, void *parent, void *child)
+     ngx_conf_merge_uint_value(conf->dyn_rec_threshold, prev->dyn_rec_threshold,
+                              40);
+ 
++    ngx_conf_merge_value(conf->do_wait_shutdown, prev->do_wait_shutdown, 0);
++
+     conf->ssl.log = cf->log;
+ 
+     if (conf->enable) {
+diff --git a/src/http/modules/ngx_http_ssl_module.h b/src/http/modules/ngx_http_ssl_module.h
+index edb963b41..58f9c2caf 100644
+--- a/src/http/modules/ngx_http_ssl_module.h
++++ b/src/http/modules/ngx_http_ssl_module.h
+@@ -63,6 +63,8 @@ typedef struct {
+     size_t                          dyn_rec_size_lo;
+     size_t                          dyn_rec_size_hi;
+     ngx_uint_t                      dyn_rec_threshold;
++
++    ngx_flag_t                      do_wait_shutdown;
+ } ngx_http_ssl_srv_conf_t;
+ 
+ 
+diff --git a/src/http/ngx_http_request.c b/src/http/ngx_http_request.c
+index de1b20270..77ecf3f6e 100644
+--- a/src/http/ngx_http_request.c
++++ b/src/http/ngx_http_request.c
+@@ -777,6 +777,8 @@ static void
+ ngx_http_ssl_handshake_handler(ngx_connection_t *c)
+ {
+     if (c->ssl->handshaked) {
++        ngx_http_connection_t     *hc;
++        ngx_http_ssl_srv_conf_t   *sscf;
+ 
+         /*
+          * The majority of browsers do not send the "close notify" alert.
+@@ -786,7 +788,14 @@ ngx_http_ssl_handshake_handler(ngx_connection_t *c)
+          * Opera and recent Mozilla send the alert.
+          */
+ 
+-        c->ssl->no_wait_shutdown = 1;
++        /*
++         * Experiment: configurable as "ssl_do_wait_shutdown on;" to try
++         * waiting on the close notifications and avoiding RST.
++         */
++        hc = c->data;
++        sscf = ngx_http_get_module_srv_conf(hc->conf_ctx, ngx_http_ssl_module);
++        if (!sscf->do_wait_shutdown)
++            c->ssl->no_wait_shutdown = 1;
+ 
+ #if (NGX_HTTP_V2                                                              \
+      && (defined TLSEXT_TYPE_application_layer_protocol_negotiation           \
