@@ -24,7 +24,7 @@ records again).
 
 --- a/src/event/ngx_event_openssl.c
 +++ b/src/event/ngx_event_openssl.c
-@@ -1174,6 +1174,7 @@
+@@ -1174,6 +1174,7 @@ ngx_ssl_create_connection(ngx_ssl_t *ssl
  
      sc->buffer = ((flags & NGX_SSL_BUFFER) != 0);
      sc->buffer_size = ssl->buffer_size;
@@ -32,7 +32,7 @@ records again).
  
      sc->session_ctx = ssl->ctx;
  
-@@ -1712,6 +1713,41 @@
+@@ -1712,6 +1713,41 @@ ngx_ssl_send_chain(ngx_connection_t *c, 
  
      for ( ;; ) {
  
@@ -74,7 +74,7 @@ records again).
          while (in && buf->last < buf->end && send < limit) {
              if (in->buf->last_buf || in->buf->flush) {
                  flush = 1;
-@@ -1813,6 +1849,9 @@
+@@ -1813,6 +1849,9 @@ ngx_ssl_write(ngx_connection_t *c, u_cha
  
      if (n > 0) {
  
@@ -86,7 +86,7 @@ records again).
              c->read->handler = c->ssl->saved_read_handler;
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -59,10 +59,19 @@
+@@ -60,10 +60,19 @@
  #endif
  
  
@@ -106,7 +106,7 @@ records again).
  };
  
  
-@@ -85,6 +94,10 @@
+@@ -86,6 +95,10 @@ struct ngx_ssl_connection_s {
      unsigned                    no_wait_shutdown:1;
      unsigned                    no_send_shutdown:1;
      unsigned                    handshake_buffer_set:1;
@@ -117,7 +117,7 @@ records again).
  };
  
  
-@@ -94,7 +107,7 @@
+@@ -95,7 +108,7 @@ struct ngx_ssl_connection_s {
  #define NGX_SSL_DFLT_BUILTIN_SCACHE  -5
  
  
@@ -128,7 +128,7 @@ records again).
  
 --- a/src/http/modules/ngx_http_ssl_module.c
 +++ b/src/http/modules/ngx_http_ssl_module.c
-@@ -234,6 +234,41 @@
+@@ -234,6 +234,41 @@ static ngx_command_t  ngx_http_ssl_comma
        offsetof(ngx_http_ssl_srv_conf_t, stapling_verify),
        NULL },
  
@@ -170,7 +170,7 @@ records again).
        ngx_null_command
  };
  
-@@ -559,6 +594,11 @@
+@@ -559,6 +594,11 @@ ngx_http_ssl_create_srv_conf(ngx_conf_t 
      sscf->session_ticket_keys = NGX_CONF_UNSET_PTR;
      sscf->stapling = NGX_CONF_UNSET;
      sscf->stapling_verify = NGX_CONF_UNSET;
@@ -182,7 +182,7 @@ records again).
  
      return sscf;
  }
-@@ -624,6 +664,20 @@
+@@ -624,6 +664,20 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *
      ngx_conf_merge_str_value(conf->stapling_responder,
                           prev->stapling_responder, "");
  
@@ -203,7 +203,7 @@ records again).
      conf->ssl.log = cf->log;
  
      if (conf->enable) {
-@@ -804,6 +858,28 @@
+@@ -804,6 +858,28 @@ ngx_http_ssl_merge_srv_conf(ngx_conf_t *
  
      }
  
@@ -234,7 +234,7 @@ records again).
  
 --- a/src/http/modules/ngx_http_ssl_module.h
 +++ b/src/http/modules/ngx_http_ssl_module.h
-@@ -57,6 +57,12 @@
+@@ -57,6 +57,12 @@ typedef struct {
  
      u_char                         *file;
      ngx_uint_t                      line;
