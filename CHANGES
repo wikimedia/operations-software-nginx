@@ -1,4 +1,79 @@
 
+Changes with nginx 1.13.9                                        20 Feb 2018
+
+    *) Feature: HTTP/2 server push support; the "http2_push" and
+       "http2_push_preload" directives.
+
+    *) Bugfix: "header already sent" alerts might appear in logs when using
+       cache; the bug had appeared in 1.9.13.
+
+    *) Bugfix: a segmentation fault might occur in a worker process if the
+       "ssl_verify_client" directive was used and no SSL certificate was
+       specified in a virtual server.
+
+    *) Bugfix: in the ngx_http_v2_module.
+
+    *) Bugfix: in the ngx_http_dav_module.
+
+
+Changes with nginx 1.13.8                                        26 Dec 2017
+
+    *) Feature: now nginx automatically preserves the CAP_NET_RAW capability
+       in worker processes when using the "transparent" parameter of the
+       "proxy_bind", "fastcgi_bind", "memcached_bind", "scgi_bind", and
+       "uwsgi_bind" directives.
+
+    *) Feature: improved CPU cache line size detection.
+       Thanks to Debayan Ghosh.
+
+    *) Feature: new directives in vim syntax highlighting scripts.
+       Thanks to Gena Makhomed.
+
+    *) Bugfix: binary upgrade refused to work if nginx was re-parented to a
+       process with PID different from 1 after its parent process has
+       finished.
+
+    *) Bugfix: the ngx_http_autoindex_module incorrectly handled requests
+       with bodies.
+
+    *) Bugfix: in the "proxy_limit_rate" directive when used with the
+       "keepalive" directive.
+
+    *) Bugfix: some parts of a response might be buffered when using
+       "proxy_buffering off" if the client connection used SSL.
+       Thanks to Patryk Lesiewicz.
+
+    *) Bugfix: in the "proxy_cache_background_update" directive.
+
+    *) Bugfix: it was not possible to start a parameter with a variable in
+       the "${name}" form with the name in curly brackets without enclosing
+       the parameter into single or double quotes.
+
+
+Changes with nginx 1.13.7                                        21 Nov 2017
+
+    *) Bugfix: in the $upstream_status variable.
+
+    *) Bugfix: a segmentation fault might occur in a worker process if a
+       backend returned a "101 Switching Protocols" response to a
+       subrequest.
+
+    *) Bugfix: a segmentation fault occurred in a master process if a shared
+       memory zone size was changed during a reconfiguration and the
+       reconfiguration failed.
+
+    *) Bugfix: in the ngx_http_fastcgi_module.
+
+    *) Bugfix: nginx returned the 500 error if parameters without variables
+       were specified in the "xslt_stylesheet" directive.
+
+    *) Workaround: "gzip filter failed to use preallocated memory" alerts
+       appeared in logs when using a zlib library variant from Intel.
+
+    *) Bugfix: the "worker_shutdown_timeout" directive did not work when
+       using mail proxy and when proxying WebSocket connections.
+
+
 Changes with nginx 1.13.6                                        10 Oct 2017
 
     *) Bugfix: switching to the next upstream server in the stream module

@@ -1290,6 +1290,12 @@ ngx_stream_proxy_process_connection(ngx_event_t *ev, ngx_uint_t from_upstream)
     s = c->data;
     u = s->upstream;
 
+    if (c->close) {
+        ngx_log_error(NGX_LOG_INFO, c->log, 0, "shutdown timeout");
+        ngx_stream_proxy_finalize(s, NGX_STREAM_OK);
+        return;
+    }
+
     c = s->connection;
     pc = u->peer.connection;
 
@@ -2149,6 +2155,12 @@ ngx_stream_proxy_bind(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
     if (cf->args->nelts > 2) {
         if (ngx_strcmp(value[2].data, "transparent") == 0) {
 #if (NGX_HAVE_TRANSPARENT_PROXY)
+            ngx_core_conf_t  *ccf;
+
+            ccf = (ngx_core_conf_t *) ngx_get_conf(cf->cycle->conf_ctx,
+                                                   ngx_core_module);
+
+            ccf->transparent = 1;
             local->transparent = 1;
 #else
             ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
