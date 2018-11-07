@@ -4,3 +4,5 @@
 0500-ssl-curve.patch
 0600-stapling-multi-file.patch
 0660-version-too-low.patch
+CVE-2018-16843_CVE-2018-16844.patch
+CVE-2018-16845.patch
