@@ -1,3 +1,16 @@
+nginx (1.13.9-1+wmf2) stretch-wikimedia; urgency=high
+
+  * Refresh the following patches:
+    0500-ssl-curve.patch
+    CVE-2018-16843_CVE-2018-16844.patch
+    CVE-2018-16845.patch
+  * Adds the following patches:
+    * CVE-2019-9516
+    * CVE-2019-9513
+    * CVE-2019-9511
+
+ -- Valentin Gutierrez <vgutierrez@wikimedia.org>  Wed, 14 Aug 2019 12:35:49 +0700
+
 nginx (1.13.9-1+wmf1) stretch-wikimedia; urgency=high
 
   * Based on debian/1.13.9-1

@@ -10,7 +10,7 @@
  
  
  #define NGX_SSL_PASSWORD_BUFFER_SIZE  4096
-@@ -2495,6 +2496,7 @@
+@@ -2495,6 +2496,7 @@ ngx_ssl_new_session(ngx_ssl_conn_t *ssl_
      ngx_ssl_sess_id_t        *sess_id;
      ngx_ssl_session_cache_t  *cache;
      u_char                    buf[NGX_SSL_MAX_SESSION_SIZE];
@@ -18,7 +18,7 @@
  
      len = i2d_SSL_SESSION(sess, NULL);
  
-@@ -2509,6 +2511,12 @@
+@@ -2509,6 +2511,12 @@ ngx_ssl_new_session(ngx_ssl_conn_t *ssl_
  
      c = ngx_ssl_get_connection(ssl_conn);
  
@@ -31,7 +31,7 @@
      ssl_ctx = c->ssl->session_ctx;
      shm_zone = SSL_CTX_get_ex_data(ssl_ctx, ngx_ssl_session_cache_index);
  
-@@ -2600,6 +2608,7 @@
+@@ -2600,6 +2608,7 @@ ngx_ssl_new_session(ngx_ssl_conn_t *ssl_
      sess_id->id = id;
      sess_id->len = len;
      sess_id->session = cached_sess;
@@ -39,7 +39,7 @@
  
      sess_id->expire = ngx_time() + SSL_CTX_get_timeout(ssl_ctx);
  
-@@ -2697,6 +2706,7 @@
+@@ -2697,6 +2706,7 @@ ngx_ssl_get_cached_session(ngx_ssl_conn_
  
              if (sess_id->expire > ngx_time()) {
                  ngx_memcpy(buf, sess_id->session, sess_id->len);
@@ -47,24 +47,24 @@
  
                  ngx_shmtx_unlock(&shpool->mutex);
  
-@@ -3534,6 +3544,14 @@
-     return NGX_OK;
- }
+@@ -3536,6 +3546,14 @@ ngx_ssl_get_curves(ngx_connection_t *c, 
  
-+
-+ngx_int_t
+ 
+ ngx_int_t
 +ngx_ssl_get_ecdhe_curve_name(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
 +{
 +    s->data = (u_char *) OBJ_nid2sn(c->ssl->curve_nid);
 +    return NGX_OK;
 +}
 +
- 
- ngx_int_t
++
++ngx_int_t
  ngx_ssl_get_session_id(ngx_connection_t *c, ngx_pool_t *pool, ngx_str_t *s)
+ {
+     u_char        *buf;
 --- a/src/event/ngx_event_openssl.h
 +++ b/src/event/ngx_event_openssl.h
-@@ -82,6 +82,7 @@
+@@ -83,6 +83,7 @@ struct ngx_ssl_connection_s {
      ngx_int_t                   last;
      ngx_buf_t                  *buf;
      size_t                      buffer_size;
@@ -72,7 +72,7 @@
  
      ngx_connection_handler_pt   handler;
  
-@@ -118,6 +119,7 @@
+@@ -119,6 +120,7 @@ struct ngx_ssl_sess_id_s {
      u_char                     *session;
      ngx_queue_t                 queue;
      time_t                      expire;
@@ -80,7 +80,7 @@
  #if (NGX_PTR_SIZE == 8)
      void                       *stub;
      u_char                      sess_id[32];
-@@ -215,6 +217,8 @@
+@@ -216,6 +218,8 @@ ngx_int_t ngx_ssl_get_ciphers(ngx_connec
      ngx_str_t *s);
  ngx_int_t ngx_ssl_get_curves(ngx_connection_t *c, ngx_pool_t *pool,
      ngx_str_t *s);
@@ -91,7 +91,7 @@
  ngx_int_t ngx_ssl_get_session_reused(ngx_connection_t *c, ngx_pool_t *pool,
 --- a/src/http/modules/ngx_http_ssl_module.c
 +++ b/src/http/modules/ngx_http_ssl_module.c
-@@ -318,6 +318,9 @@
+@@ -318,6 +318,9 @@ static ngx_http_variable_t  ngx_http_ssl
      { ngx_string("ssl_curves"), NULL, ngx_http_ssl_variable,
        (uintptr_t) ngx_ssl_get_curves, NGX_HTTP_VAR_CHANGEABLE, 0 },
  
@@ -103,7 +103,7 @@
  
 --- a/src/stream/ngx_stream_ssl_module.c
 +++ b/src/stream/ngx_stream_ssl_module.c
-@@ -233,6 +233,9 @@
+@@ -233,6 +233,9 @@ static ngx_stream_variable_t  ngx_stream
      { ngx_string("ssl_curves"), NULL, ngx_stream_ssl_variable,
        (uintptr_t) ngx_ssl_get_curves, NGX_STREAM_VAR_CHANGEABLE, 0 },
  
